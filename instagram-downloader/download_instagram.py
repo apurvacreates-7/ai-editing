@@ -1,32 +1,32 @@
 #!/usr/bin/env python3
 """
-Download Instagram posts / reels / videos listed in a CSV.
+Download Instagram posts / reels / videos / photos listed in a CSV.
+
+Uses gallery-dl, which downloads BOTH images and videos from Instagram
+(yt-dlp only handles videos, so photo posts fail with it).
 
 CSV format (header row required):
     name,link of video
     Deepak,https://www.instagram.com/p/Db720RDMnVQ/...
     ...
 
-Files are saved into ./downloads/ named after the person, e.g. "01_Deepak.mp4".
+Each link's media is saved into ./downloads/NN_Name/ (a folder per person,
+so multi-photo "carousel" posts keep all their images together).
 
 --------------------------------------------------------------------------------
-SETUP (one time)
+SETUP (one time)  --  macOS
 --------------------------------------------------------------------------------
-1. Install Python 3 (https://python.org) if you don't have it.
-2. Install yt-dlp:
-       pip install -U yt-dlp
-   (yt-dlp also uses ffmpeg for some formats; install it if prompted:
-    macOS: `brew install ffmpeg`  |  Windows: https://ffmpeg.org  |  Linux: `sudo apt install ffmpeg`)
+    python3 -m pip install --user --break-system-packages -U gallery-dl
 
 --------------------------------------------------------------------------------
 RUN
 --------------------------------------------------------------------------------
-    python download_instagram.py "Fussy_chat__for_claude.csv"
+    python3 download_instagram.py "Fussy_chat__for_claude.csv"
 
-If some downloads fail with a login/"rate-limit"/"login required" error,
-Instagram wants a logged-in session. Export your browser cookies to a file
-called cookies.txt (use a browser extension like "Get cookies.txt LOCALLY"),
-put it next to this script, and run again — the script picks it up automatically.
+If downloads fail with a login / "login required" / "429" error, Instagram
+wants a logged-in session. Export your browser cookies to a file named
+cookies.txt (browser extension "Get cookies.txt LOCALLY"), put it next to
+this script, and run again — it is picked up automatically.
 --------------------------------------------------------------------------------
 """
 
@@ -41,10 +41,9 @@ COOKIES_FILE = "cookies.txt"  # optional; used automatically if present
 
 
 def safe_name(name: str) -> str:
-    """Make a filesystem-safe version of a person's name."""
     name = name.strip()
-    name = re.sub(r"[^\w\s-]", "", name)          # drop odd characters
-    name = re.sub(r"\s+", "_", name)              # spaces -> underscores
+    name = re.sub(r"[^\w\s-]", "", name)
+    name = re.sub(r"\s+", "_", name)
     return name or "unknown"
 
 
@@ -55,7 +54,7 @@ def is_profile_only(url: str) -> bool:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python download_instagram.py <csv_file>")
+        print("Usage: python3 download_instagram.py <csv_file>")
         sys.exit(1)
 
     csv_path = sys.argv[1]
@@ -72,7 +71,6 @@ def main() -> None:
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            # tolerate slightly different header names
             name = row.get("name") or row.get("Name") or ""
             link = row.get("link of video") or row.get("link") or ""
             if link.strip():
@@ -92,25 +90,27 @@ def main() -> None:
             skipped.append((name, url, "profile link, no specific post"))
             continue
 
-        out_template = os.path.join(OUT_DIR, f"{label}.%(ext)s")
+        dest = os.path.join(OUT_DIR, label)
         cmd = [
-            sys.executable, "-m", "yt_dlp",
-            "-o", out_template,
-            "--no-warnings",
-            "--retries", "3",
-            "--sleep-requests", "2",      # be gentle: pause between requests
+            sys.executable, "-m", "gallery_dl",
+            "-D", dest,            # save this post's media into its own folder
+            "--sleep-request", "2",  # be gentle between requests
             url,
         ]
         if use_cookies:
             cmd += ["--cookies", COOKIES_FILE]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
-            print("   OK\n")
+        # gallery-dl prints downloaded file paths on stdout; count them
+        got_files = bool(os.path.isdir(dest) and os.listdir(dest))
+
+        if result.returncode == 0 and got_files:
+            n = len(os.listdir(dest))
+            print(f"   OK ({n} file(s))\n")
             ok.append((name, url))
         else:
             err = (result.stderr or result.stdout).strip().splitlines()
-            reason = err[-1] if err else "unknown error"
+            reason = err[-1] if err else "unknown error (nothing downloaded)"
             print(f"   FAILED: {reason}\n")
             failed.append((name, url, reason))
 
