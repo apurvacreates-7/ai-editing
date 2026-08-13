@@ -7,19 +7,20 @@ Uses gallery-dl (downloads BOTH images and videos).
 Usage:
     python3 download_instagram.py <csv_file> [browser]
 
-    <csv_file>  CSV with a header row:  name,link of video
-    [browser]   optional: chrome | safari | firefox | edge | brave
-                If given, the tool reuses that browser's logged-in Instagram
-                session (needed for content that requires login).
-
-Examples:
-    python3 download_instagram.py "Fussy_chat__for_claude.csv"
-    python3 download_instagram.py "Fussy_chat__for_claude.csv" chrome
+Login (needed for most Instagram content):
+  Preferred — a cookies file:
+    Put a file whose name contains "cookies" and ends in .txt (e.g.
+    cookies.txt, www.instagram.com_cookies.txt) in this folder. It is
+    detected and used automatically.
+  Alternative — a browser session:
+    Pass a browser name as the 2nd argument (chrome | safari | firefox |
+    edge | brave). Note: recent Chrome encrypts cookies and often fails.
 
 Media is saved into ./downloads/NN_Name/ (a folder per person).
 """
 
 import csv
+import glob
 import os
 import re
 import subprocess
@@ -38,6 +39,14 @@ def is_profile_only(url: str) -> bool:
     return not re.search(r"/(p|reel|reels|tv|stories)/", url)
 
 
+def find_cookies_file() -> str | None:
+    for pat in ("cookies.txt", "*cookies*.txt", "*Cookies*.txt"):
+        hits = sorted(glob.glob(pat))
+        if hits:
+            return hits[0]
+    return None
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: python3 download_instagram.py <csv_file> [browser]")
@@ -45,14 +54,19 @@ def main() -> None:
 
     csv_path = sys.argv[1]
     browser = sys.argv[2].strip().lower() if len(sys.argv) > 2 else None
+    cookies = find_cookies_file()
 
     if not os.path.exists(csv_path):
         print(f"CSV not found: {csv_path}")
         sys.exit(1)
 
     os.makedirs(OUT_DIR, exist_ok=True)
-    if browser:
+    if cookies:
+        print(f"Using cookies file: {cookies}\n")
+    elif browser:
         print(f"Using your {browser} login session.\n")
+    else:
+        print("No login provided — only fully public posts will work.\n")
 
     rows = []
     with open(csv_path, newline="", encoding="utf-8") as f:
@@ -71,14 +85,16 @@ def main() -> None:
         print(f"[{i}/{total}] {name}  ->  {url}")
 
         if is_profile_only(url):
-            print("   ! Profile link, not a specific post — skipping.\n")
+            print("   ! Profile link — skipping.\n")
             skipped.append((name, url, "profile link, no specific post"))
             continue
 
         dest = os.path.join(OUT_DIR, label)
         cmd = [sys.executable, "-m", "gallery_dl", "-D", dest,
                "--sleep-request", "2"]
-        if browser:
+        if cookies:
+            cmd += ["--cookies", cookies]
+        elif browser:
             cmd += ["--cookies-from-browser", browser]
         cmd.append(url)
 
@@ -94,7 +110,7 @@ def main() -> None:
             print(f"   FAILED: {reason}\n")
             failed.append((name, url, reason))
 
-    print("=" * 70)
+    print("=" * 60)
     print(f"DONE.  {len(ok)} downloaded, {len(failed)} failed, {len(skipped)} skipped.")
     print(f"Files are in: {os.path.abspath(OUT_DIR)}")
     if failed:
@@ -105,9 +121,6 @@ def main() -> None:
         print("\nSKIPPED:")
         for name, url, reason in skipped:
             print(f"  - {name}: {reason}")
-    if failed and not browser:
-        print("\nTip: many failures are Instagram requiring login. Re-run adding your")
-        print('browser name, e.g.:  python3 download_instagram.py "%s" chrome' % csv_path)
 
 
 if __name__ == "__main__":
