@@ -27,6 +27,8 @@ except Exception:
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
 
+VERSION = "v5 (2025-08-18) — confirmed-cats override"
+
 AI_FINDINGS = {
     1443: ("AI-generated video", "Google Veo/Gemini watermark — AI video"),
     949:  ("AI / fake photo", "Underwater 'swimming cat' — AI/composite"),
@@ -37,6 +39,16 @@ AI_FINDINGS = {
     186:  ("Graphic / poster", "Designed 'Adopt' poster, not an original photo"),
     650:  ("Graphic / listing", "'Kitten for sale' graphic, not an original photo"),
 }
+
+# Names confirmed by a human to contain a cat — never disqualify these; always
+# place them in "No Instagram link" (nudge) shown as a detected cat.
+CONFIRMED_CATS = {n.lower() for n in [
+    "Aryan Raj", "APRAJIT PODDAR", "Casius cochikunnel", "Mohd Danish zafar",
+    "Shariffs crazy", "ARJUN", "Supriya Raju", "Mohd zaid", "Rajat Biswas",
+    "Faizal hossain", "Thirunavukkarasu", "PARIMAL KUMAR GAMIT", "Bhuwan Sharma",
+    "Ajoy shil", "Alisha mansoor", "Anosh m", "Daler singh", "Doli das",
+    "Sarathy", "Senti", "RIKUL SARMA", "Hayat", "Twinkle Dutta", "Ali Ahmad",
+]}
 
 
 def safe_name(n):
@@ -142,6 +154,7 @@ def build():
     if not roster or not os.path.exists(roster):
         print('Roster CSV not found. Pass it: python3 build_dashboard.py "sheet.csv"')
         sys.exit(1)
+    print(f"=== build_dashboard {VERSION} ===")
     print(f"Roster: {roster}")
     analysis = load_by_idx("analysis_results.csv")
     scan = load_by_idx("scan_results.csv")
@@ -179,10 +192,16 @@ def build():
         sc = scan.get(i, {})
         klass = cat_class(sc.get("has_cat")) if sc else "unknown"
         real_link = bool(link) and not link.lower().startswith("choice-")  # profile/other URL
+        confirmed = name.strip().lower() in CONFIRMED_CATS
 
         img = embed_any(first_in(os.path.join("thumbs", label + ".*"))
                         or first_in(os.path.join("uploads_media", label + ".*")), 380, 70)
         mtype = "video" if video else "photo"
+
+        # ---- Human-confirmed cat: always Tab 2 (nudge), shown as a detected cat ----
+        if has_media and confirmed:
+            t2.append({"name": name, "row": i, "img": img, "mtype": mtype, "klass": "cat"})
+            continue
 
         # ---- Tab 3: disqualified — only visually-confirmed AI / stock content ----
         # (Cat detection confuses fluffy cats with dogs, so we never auto-disqualify
@@ -431,7 +450,7 @@ main{{padding:26px 18px 60px}} .disp{{font-size:30px}}}}
 <div class=brand>WHISKAS</div>
 <div class=prod>Fussy&nbsp;Cat<br>UGC Review</div>
 <nav>{nav}</nav>
-<div class=foot>{esc(summary)}<br><br>#MyFussyCatAd</div>
+<div class=foot>{esc(summary)}<br><br>#MyFussyCatAd<br><span style="opacity:.6">{esc(VERSION)}</span></div>
 </aside>
 <main>{''.join(panels)}</main>
 </div>
