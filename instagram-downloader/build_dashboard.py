@@ -3,13 +3,13 @@
 Build a clean, editorial, Whiskas-branded HTML dashboard for the Fussy Cat UGC review.
 
 One self-contained file, all images embedded (works offline). Left sidebar nav
-with four sections:
-  01 Instagram submissions   - chat photo vs Instagram post, match? cat? likes, caption
-  02 No Instagram link       - uploaded a cat but no IG link -> nudge to post + link
-  03 Disqualified uploads    - no cat / AI / wrong content -> ask to re-upload
-  04 Invalid links           - gave a profile/junk link -> disqualify
+with four mutually-exclusive sections, each with a clear ACTION on every card:
+  01 Instagram submissions   - sorted best-match first; QUALIFY / REVIEW / DISQUALIFY
+  02 No Instagram link       - has a cat but no link -> SEND REMINDER to post + link
+  03 Disqualified            - a dog/other animal, or AI/stock content -> DISQUALIFY
+  04 Invalid links           - gave a profile/other link, not a post -> REQUEST a valid link
 
-Reads: the roster CSV, analysis_results.csv, scan_results.csv, and the local image
+Reads: the roster CSV, analysis_results.csv, scan_results.csv, and local image
 folders (downloads/, s3_media/, uploads_media/, thumbs/).
 
 Run:
@@ -48,6 +48,21 @@ def is_ig(u):
 
 def cat_yes(s):
     return (s or "").strip().upper().startswith("CAT")
+
+def cat_class(s):
+    """From a scan 'has_cat' string -> cat | other | unclear | unknown."""
+    s = (s or "").strip()
+    if not s:
+        return "unknown"
+    if s.upper().startswith("CAT"):
+        return "cat"
+    if "saw:" in s.lower():          # a different animal (e.g. dog) was detected
+        return "other"
+    return "unclear"                 # nothing detected — could be a missed cat
+
+def other_animal(s):
+    m = re.search(r"saw:\s*([a-z, ]+)", (s or "").lower())
+    return m.group(1).strip() if m else "another animal"
 
 def load_by_idx(path):
     d = {}
@@ -114,6 +129,13 @@ def first_in(pattern):
 def esc(s):
     return html.escape(str(s if s is not None else ""))
 
+def simval(d):
+    s = str(d.get("similarity", "")).replace("%", "").strip()
+    try:
+        return int(s)
+    except Exception:
+        return -1
+
 
 def build():
     roster = sys.argv[1] if len(sys.argv) > 1 else find_roster()
@@ -127,7 +149,6 @@ def build():
     rows = list(csv.DictReader(open(roster, newline="", encoding="utf-8")))
 
     t1, t2, t3, t4 = [], [], [], []
-    done = 0
     for i, r in enumerate(rows, start=1):
         name = (r.get("name") or "").strip()
         link = (r.get("link of video") or "").strip()
@@ -137,47 +158,54 @@ def build():
         label = f"{i:04d}_{safe_name(name)}"
         ai = AI_FINDINGS.get(i)
 
+        # ---- Tab 1: valid Instagram post/reel/story link ----
         if is_ig(link):
             a = analysis.get(i, {})
-            chat_img = embed_any(first_in(os.path.join("s3_media", label + ".*")))
-            ig_img = embed_any(first_in(os.path.join("downloads", label, "*")))
-            verdict = a.get("match_verdict", "") or "PENDING"
-            t1.append({"name": name, "row": i, "chat_img": chat_img, "ig_img": ig_img,
-                       "chat_vid": bool(video), "ig_vid": False,
-                       "verdict": verdict, "similarity": a.get("similarity", ""),
-                       "ig_cat": a.get("instagram_has_cat", ""),
-                       "chat_cat": a.get("chat_image_has_cat", ""),
-                       "likes": a.get("likes", ""), "username": a.get("ig_username", ""),
-                       "caption": a.get("instagram_caption", ""),
-                       "ai": ai, "ai_mark": a.get("instagram_ai_wordmark", "")})
-            if verdict != "PENDING":
-                done += 1
+            t1.append({
+                "name": name, "row": i,
+                "chat_img": embed_any(first_in(os.path.join("s3_media", label + ".*"))),
+                "ig_img": embed_any(first_in(os.path.join("downloads", label, "*"))),
+                "chat_vid": bool(video),
+                "verdict": a.get("match_verdict", "") or "PENDING",
+                "similarity": a.get("similarity", ""),
+                "ig_cat": a.get("instagram_has_cat", ""),
+                "chat_cat": a.get("chat_image_has_cat", ""),
+                "likes": a.get("likes", ""), "username": a.get("ig_username", ""),
+                "caption": a.get("instagram_caption", ""),
+                "ai": ai, "ai_mark": a.get("instagram_ai_wordmark", "")})
             continue
 
-        if link:
-            if "instagram.com" in link:
-                ltype = "Instagram profile link — not a specific post/reel"
-            elif link.lower().startswith("choice-"):
-                ltype = "Not a real link (leftover form value)"
-            else:
-                ltype = "Not a valid Instagram post/reel link"
-            img = embed_any(first_in(os.path.join("thumbs", label + ".*"))
-                            or first_in(os.path.join("uploads_media", label + ".*")), 360, 68)
-            t4.append({"name": name, "row": i, "link": link, "ltype": ltype, "img": img, "ai": ai})
+        has_media = bool(media_link)
+        sc = scan.get(i, {})
+        klass = cat_class(sc.get("has_cat")) if sc else "unknown"
+        real_link = bool(link) and not link.lower().startswith("choice-")  # profile/other URL
 
-        if media_link:
-            sc = scan.get(i, {})
-            has_cat = cat_yes(sc.get("has_cat")) if sc else None
-            img = embed_any(first_in(os.path.join("thumbs", label + ".*"))
-                            or first_in(os.path.join("uploads_media", label + ".*")), 380, 70)
-            mtype = "video" if video else "photo"
-            t2.append({"name": name, "row": i, "img": img, "has_cat": has_cat, "mtype": mtype, "ai": ai})
-            reason = (ai[0] + " — " + ai[1]) if ai else ("No cat detected in the upload"
-                                                          if (sc and has_cat is False) else None)
-            if reason:
-                t3.append({"name": name, "row": i, "img": img, "reason": reason, "mtype": mtype})
+        img = embed_any(first_in(os.path.join("thumbs", label + ".*"))
+                        or first_in(os.path.join("uploads_media", label + ".*")), 380, 70)
+        mtype = "video" if video else "photo"
 
-    # ---------------- render ----------------
+        # ---- Tab 3: disqualified — only visually-confirmed AI / stock content ----
+        # (Cat detection confuses fluffy cats with dogs, so we never auto-disqualify
+        #  on it; anything the detector is unsure about goes to Tab 2 as "needs verify".)
+        if has_media and ai:
+            t3.append({"name": name, "row": i, "img": img, "mtype": mtype,
+                       "reason": ai[0], "detail": ai[1]})
+            continue
+
+        # ---- Tab 4: gave a real link, but not a valid post/reel ----
+        if real_link:
+            ltype = ("They linked their Instagram profile — not a specific post/reel"
+                     if "instagram.com" in link else "Not a valid Instagram post/reel link")
+            t4.append({"name": name, "row": i, "link": link, "ltype": ltype, "img": img})
+            continue
+
+        # ---- Tab 2: has media, no valid link -> nudge (cat, or unclear=needs verify) ----
+        if has_media:
+            t2.append({"name": name, "row": i, "img": img, "mtype": mtype, "klass": klass})
+
+    t1.sort(key=simval, reverse=True)   # highest match first
+
+    # ---------------- render helpers ----------------
     def badge(text, cls):
         return f"<span class='b {cls}'>{esc(text)}</span>"
 
@@ -187,22 +215,40 @@ def build():
                  if src else "<div class='frame empty'>no image</div>")
         return f"<figure class='ph'>{frame}<figcaption>{esc(cap)}</figcaption></figure>"
 
+    def action(kind, label, text):
+        return (f"<div class='action {kind}'><span class='alabel'>{esc(label)}</span>"
+                f"<span class='atext'>{esc(text)}</span></div>")
+
     vmap = {"SAME": ("Match", "ok"), "LIKELY SAME": ("Likely match", "ok"),
             "UNCERTAIN": ("Unclear", "warn"), "DIFFERENT": ("Different", "bad"),
             "PENDING": ("Not fetched yet", "mut"), "NO COMPARISON": ("Not fetched yet", "mut")}
 
+    # ---- Tab 1 cards ----
     c1 = []
     for d in t1:
+        cat_ig = cat_yes(d["ig_cat"]); cat_chat = cat_yes(d["chat_cat"])
+        is_ai = bool(d["ai"] or d["ai_mark"])
         vlabel, vcls = vmap.get(d["verdict"], (d["verdict"], "mut"))
-        vtext = vlabel + (f" · {d['similarity']}" if d["similarity"] else "")
-        badges = [badge(vtext, vcls),
-                  badge("Cat in chat" if cat_yes(d["chat_cat"]) else "No cat in chat",
-                        "ok" if cat_yes(d["chat_cat"]) else "bad")]
+        badges = [badge(vlabel + (f" · {d['similarity']}" if d["similarity"] else ""), vcls),
+                  badge("Cat in chat" if cat_chat else "No cat in chat", "ok" if cat_chat else "bad")]
         if d["verdict"] != "PENDING":
-            badges.append(badge("Cat on Instagram" if cat_yes(d["ig_cat"]) else "No cat on Instagram",
-                                "ok" if cat_yes(d["ig_cat"]) else "bad"))
-        if d["ai"] or d["ai_mark"]:
+            badges.append(badge("Cat on Instagram" if cat_ig else "No cat on Instagram",
+                                "ok" if cat_ig else "bad"))
+        if is_ai:
             badges.append(badge("AI content", "bad"))
+        # decision / action
+        if d["verdict"] == "PENDING":
+            act = action("grey", "Fetch post", "Download the Instagram post to review this entry")
+        elif is_ai:
+            act = action("red", "Disqualify", "Instagram post is AI-generated content")
+        elif not cat_ig:
+            act = action("red", "Disqualify", "No cat in the Instagram post")
+        elif d["verdict"] == "DIFFERENT":
+            act = action("amber", "Review", "Chat photo doesn’t match the post — verify before approving")
+        elif d["verdict"] == "UNCERTAIN":
+            act = action("amber", "Review", "Unclear match — verify manually")
+        else:
+            act = action("green", "Qualified", "Approve — cat post matches their chat photo")
         meta = []
         if d["username"]:
             meta.append("@" + esc(d["username"]))
@@ -211,46 +257,53 @@ def build():
         cap = f"<blockquote class='cap'>{esc(d['caption'])}</blockquote>" if d["caption"] else ""
         inner = (f"<div class='chead'><span class='nm'>{esc(d['name'])}</span><span class='rw'>row {d['row']}</span></div>"
                  f"<div class='pair'>{figure(d['chat_img'],'Chat upload',d['chat_vid'])}"
-                 f"{figure(d['ig_img'],'Instagram post',d['ig_vid'])}</div>"
+                 f"{figure(d['ig_img'],'Instagram post')}</div>"
                  f"<div class='badges'>{''.join(badges)}</div>"
-                 + (f"<div class='meta'>{' &nbsp;·&nbsp; '.join(meta)}</div>" if meta else "") + cap)
+                 + (f"<div class='meta'>{' &nbsp;·&nbsp; '.join(meta)}</div>" if meta else "")
+                 + cap + act)
         c1.append(f"<article class='card' data-v='{esc(d['verdict'])}' data-name='{esc(d['name'].lower())}'>{inner}</article>")
 
+    # ---- Tab 2 cards ----
     c2 = []
     for d in t2:
-        cb = (badge("Cat detected", "ok") if d["has_cat"] is True else
-              badge("No cat found", "bad") if d["has_cat"] is False else badge("Not scanned", "mut"))
-        ai = badge("AI content", "bad") if d["ai"] else ""
-        flag = "yes" if d["has_cat"] else ("no" if d["has_cat"] is False else "unknown")
+        if d["klass"] == "cat":
+            cb = badge("Cat detected", "ok")
+            act = action("purple", "Send reminder", "Ask them to post this on Instagram and share the link")
+            flag = "yes"
+        else:  # detector unsure (found nothing, or confused a fluffy cat for a dog)
+            cb = badge("Please verify it’s a cat", "warn")
+            act = action("amber", "Verify & remind",
+                         "Detector isn’t sure — check it’s a cat, then remind them to post & add the link")
+            flag = "verify"
         inner = (f"<div class='chead'><span class='nm'>{esc(d['name'])}</span><span class='rw'>row {d['row']}</span></div>"
                  f"{figure(d['img'], d['mtype'], d['mtype']=='video')}"
-                 f"<div class='badges'>{cb}{ai}</div>"
-                 f"<div class='act'>Nudge to post on Instagram &amp; add the link</div>")
+                 f"<div class='badges'>{cb}</div>{act}")
         c2.append(f"<article class='card' data-cat='{flag}' data-name='{esc(d['name'].lower())}'>{inner}</article>")
 
+    # ---- Tab 3 cards ----
     c3 = []
     for d in t3:
         inner = (f"<div class='chead'><span class='nm'>{esc(d['name'])}</span><span class='rw'>row {d['row']}</span></div>"
                  f"{figure(d['img'], d['mtype'], d['mtype']=='video')}"
-                 f"<div class='badges'>{badge('Disqualified','bad')}</div>"
-                 f"<div class='meta'>{esc(d['reason'])}</div>"
-                 f"<div class='act'>Ask them to upload a real cat photo/video</div>")
+                 f"<div class='badges'>{badge(d['reason'], 'bad')}</div>"
+                 f"<div class='meta'>{esc(d['detail'])}</div>"
+                 + action("red", "Disqualify", "Not a valid cat entry — ask them to upload a real cat photo/video"))
         c3.append(f"<article class='card' data-name='{esc(d['name'].lower())}'>{inner}</article>")
 
+    # ---- Tab 4 cards ----
     c4 = []
     for d in t4:
-        ai = badge("AI content", "bad") if d["ai"] else ""
         inner = (f"<div class='chead'><span class='nm'>{esc(d['name'])}</span><span class='rw'>row {d['row']}</span></div>"
                  + (figure(d["img"], "their upload") if d["img"] else "")
-                 + f"<div class='badges'>{badge('Invalid link','bad')}{ai}</div>"
+                 + f"<div class='badges'>{badge('Invalid link', 'bad')}</div>"
                  f"<div class='linkval'>{esc(d['link'])}</div>"
                  f"<div class='meta'>{esc(d['ltype'])}</div>"
-                 f"<div class='act'>Ask for a valid Instagram post/reel link</div>")
+                 + action("purple", "Request link", "Ask them for a valid Instagram post/reel link"))
         c4.append(f"<article class='card' data-name='{esc(d['name'].lower())}'>{inner}</article>")
 
     tabs = [
         ("Instagram submissions", len(t1),
-         "They submitted an Instagram link. Does their post match the photo they sent in chat, and is there a cat in each?",
+         "They submitted an Instagram link, sorted best match first. Does the post match their chat photo, and is there a cat in each?",
          c1,
          "<button class='chip' data-f='all'>All</button>"
          "<button class='chip' data-f='SAME'>Match</button>"
@@ -261,13 +314,13 @@ def build():
          "They uploaded a cat but gave no Instagram link. Nudge them to post it and share the link.",
          c2,
          "<button class='chip' data-f='all'>All</button>"
-         "<button class='chip' data-f='yes'>Has cat</button>"
-         "<button class='chip' data-f='no'>No cat</button>"),
-        ("Disqualified uploads", len(t3),
-         "The upload is not a valid cat photo or video — no cat, AI-generated, or the wrong content. Ask them to re-upload.",
+         "<button class='chip' data-f='yes'>Cat detected</button>"
+         "<button class='chip' data-f='verify'>Needs verify</button>"),
+        ("Disqualified", len(t3),
+         "Confirmed not a genuine cat photo — AI-generated or stock/graphic content.",
          c3, ""),
         ("Invalid links", len(t4),
-         "They gave a profile or junk link, not a real post or reel. Ask for a valid Instagram post/reel link.",
+         "They gave a profile or other link, not a real post or reel. Ask for a valid Instagram post/reel link.",
          c4, ""),
     ]
 
@@ -303,31 +356,24 @@ def build():
 --serif:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,'Times New Roman',serif;
 --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}}
 *{{box-sizing:border-box}}
-body{{margin:0;font-family:var(--sans);color:var(--body);background:var(--bg);
--webkit-font-smoothing:antialiased}}
-a{{color:inherit}}
+body{{margin:0;font-family:var(--sans);color:var(--body);background:var(--bg);-webkit-font-smoothing:antialiased}}
 .app{{display:flex;align-items:flex-start;max-width:1360px;margin:0 auto}}
-/* sidebar */
 .side{{width:260px;flex:none;position:sticky;top:0;height:100vh;padding:34px 26px;
 border-right:1px solid var(--line);background:#fff}}
 .brand{{font-weight:800;letter-spacing:.22em;font-size:13px;color:var(--purple)}}
 .prod{{font-family:var(--serif);font-size:24px;line-height:1.15;color:var(--ink);margin:6px 0 26px}}
 .nav{{display:flex;width:100%;align-items:center;gap:10px;border:0;background:none;cursor:pointer;
 text-align:left;padding:11px 10px;border-radius:9px;color:var(--body);margin-bottom:2px}}
-.nav:hover{{background:var(--bg)}}
-.nav.on{{background:var(--purple-soft);color:var(--purple)}}
+.nav:hover{{background:var(--bg)}} .nav.on{{background:var(--purple-soft);color:var(--purple)}}
 .nav .n{{font-variant-numeric:tabular-nums;font-size:12px;color:var(--mut);width:20px}}
-.nav.on .n{{color:var(--purple)}}
-.nav .t{{flex:1;font-size:14px;font-weight:600}}
+.nav.on .n{{color:var(--purple)}} .nav .t{{flex:1;font-size:14px;font-weight:600}}
 .nav .c{{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}}
 .side .foot{{margin-top:26px;padding-top:18px;border-top:1px solid var(--line);
 font-size:12px;color:var(--mut);line-height:1.6}}
-/* main */
 main{{flex:1;min-width:0;padding:44px 48px 80px}}
 .panel{{display:none;max-width:1100px}} .panel.on{{display:block}}
 .eye{{text-transform:uppercase;letter-spacing:.16em;font-size:12px;font-weight:700;color:var(--purple)}}
-.disp{{font-family:var(--serif);font-weight:600;font-size:38px;line-height:1.1;color:var(--ink);
-margin:10px 0 12px}}
+.disp{{font-family:var(--serif);font-weight:600;font-size:38px;line-height:1.1;color:var(--ink);margin:10px 0 12px}}
 .lead{{font-size:17px;line-height:1.6;color:var(--mut);max-width:680px;margin:0 0 22px}}
 hr{{border:0;border-top:1px solid var(--line);margin:0 0 24px}}
 .toolbar{{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:22px}}
@@ -339,7 +385,8 @@ font-size:14px;font-family:var(--sans);background:#fff}}
 font-size:13px;color:var(--body);font-family:var(--sans)}}
 .chip.on{{background:var(--purple);color:#fff;border-color:var(--purple)}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(304px,1fr));gap:18px}}
-.card{{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px}}
+.card{{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px;
+display:flex;flex-direction:column}}
 .chead{{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px}}
 .nm{{font-size:15px;font-weight:700;color:var(--ink)}}
 .rw{{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}}
@@ -351,19 +398,27 @@ display:flex;align-items:center;justify-content:center}}
 .frame.empty{{color:var(--mut);font-size:13px}}
 .vt{{position:absolute;top:7px;left:7px;background:rgba(36,22,38,.72);color:#fff;font-size:10px;
 letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px}}
-figcaption{{text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;font-weight:700;
-color:var(--mut);margin-top:7px}}
+figcaption{{text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;font-weight:700;color:var(--mut);margin-top:7px}}
 .badges{{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 2px}}
 .b{{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap}}
 .b.ok{{background:var(--okbg);color:var(--ok)}} .b.bad{{background:var(--badbg);color:var(--bad)}}
 .b.warn{{background:var(--warnbg);color:var(--warn)}} .b.mut{{background:#efedf2;color:var(--mut)}}
 .meta{{color:var(--mut);font-size:13px;margin-top:9px}}
-.act{{color:var(--purple);font-size:12.5px;font-weight:600;margin-top:10px}}
 .cap{{font-family:var(--serif);font-style:italic;font-size:14.5px;line-height:1.5;color:var(--body);
 margin:12px 0 0;padding:2px 0 2px 13px;border-left:3px solid var(--purple-soft);
 max-height:96px;overflow:auto;white-space:pre-wrap}}
 .linkval{{font-size:12px;word-break:break-all;background:var(--bg);border:1px solid var(--line);
-border-radius:8px;padding:8px 9px;margin-top:9px;color:#555;font-family:var(--sans)}}
+border-radius:8px;padding:8px 9px;margin-top:9px;color:#555}}
+/* the clear ACTION bar */
+.action{{margin-top:auto;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:10px;
+margin-top:13px}}
+.action .alabel{{text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:800}}
+.action .atext{{font-size:13px;line-height:1.4}}
+.action.green{{background:var(--okbg)}} .action.green .alabel{{color:var(--ok)}} .action.green .atext{{color:#2c5a3c}}
+.action.red{{background:var(--badbg)}} .action.red .alabel{{color:var(--bad)}} .action.red .atext{{color:#8f3a36}}
+.action.amber{{background:var(--warnbg)}} .action.amber .alabel{{color:var(--warn)}} .action.amber .atext{{color:#725722}}
+.action.purple{{background:var(--purple-soft)}} .action.purple .alabel{{color:var(--purple)}} .action.purple .atext{{color:#5a437a}}
+.action.grey{{background:#eef0f3}} .action.grey .alabel{{color:#5c6470}} .action.grey .atext{{color:#5c6470}}
 .noresults{{color:var(--mut);padding:34px;text-align:center}}
 @media(max-width:820px){{
 .app{{display:block}} .side{{width:auto;height:auto;position:static;border-right:0;
@@ -400,10 +455,10 @@ p.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));ch.classList.ad
     with open(out, "w", encoding="utf-8") as f:
         f.write(doc)
     mb = os.path.getsize(out) / 1e6
-    print(f"\nWrote {out}  ({mb:.1f} MB, {len(t1)+len(t2)+len(t3)+len(t4)} cards)")
-    print(f"  01 Instagram submissions: {len(t1)}  ({done} reviewed, {len(t1)-done} pending)")
+    print(f"\nWrote {out}  ({mb:.1f} MB)")
+    print(f"  01 Instagram submissions: {len(t1)}  (sorted best-match first)")
     print(f"  02 No Instagram link:     {len(t2)}")
-    print(f"  03 Disqualified uploads:  {len(t3)}")
+    print(f"  03 Disqualified:          {len(t3)}")
     print(f"  04 Invalid links:         {len(t4)}")
     print("\nOpen it:  open Fussy_cat_dashboard.html")
 
