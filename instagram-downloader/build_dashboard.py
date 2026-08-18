@@ -189,6 +189,7 @@ def build():
                 "ig_cat": a.get("instagram_has_cat", ""),
                 "chat_cat": a.get("chat_image_has_cat", ""),
                 "likes": a.get("likes", ""), "username": a.get("ig_username", ""),
+                "comments": a.get("comments", ""), "views": a.get("views", ""),
                 "caption": a.get("instagram_caption", ""),
                 "ai": ai, "ai_mark": a.get("instagram_ai_wordmark", "")})
             continue
@@ -291,6 +292,10 @@ def build():
             meta.append("@" + esc(d["username"]))
         if str(d["likes"]) != "":
             meta.append(esc(d["likes"]) + " likes")
+        if str(d.get("comments", "")) != "":
+            meta.append(esc(d["comments"]) + " comments")
+        if str(d.get("views", "")) != "":
+            meta.append(esc(d["views"]) + " views")
         inner = (head(d["name"], d["row"])
                  + f"<div class='pair'>{figure(d['chat_img'],'Chat upload','chat',d['chat_vid'])}"
                  f"{figure(d['ig_img'],'Instagram post','ig')}</div>"
