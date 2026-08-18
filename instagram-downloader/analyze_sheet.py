@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+"""
+Full-sheet exercise. For every row that has a real Instagram post/reel/story
+link, this:
+  1. downloads the Instagram media (gallery-dl + your cookies.txt),
+  2. downloads the chat upload (video_s3_link or photo_s3_link),
+  3. compares them with CLIP  -> SAME / LIKELY SAME / UNCERTAIN / DIFFERENT (+ %),
+  4. detects whether a CAT is present in each (local YOLO),
+  5. reads the Instagram CAPTION (from post metadata).
+
+RESUMABLE: progress is saved to analysis_checkpoint.jsonl after each person.
+If Instagram throttles you and rows start failing, just wait a bit and run it
+again — it skips everyone already done and continues.
+
+Outputs (rebuilt every run from the checkpoint):
+  - analysis_results.csv
+  - analysis_report.html          (problems/most-suspicious first)
+  - comparisons/NNNN_Name.jpg
+
+Run:
+    python3 analyze_sheet.py                 # auto-finds the sheet csv
+    python3 analyze_sheet.py "sheet.csv"
+
+Setup (one time):
+    python3 -m pip install --user --break-system-packages -U \
+        pillow numpy opencv-python-headless requests ultralytics open_clip_torch gallery-dl
+"""
+
+import csv, glob, html, json, os, re, subprocess, sys, urllib.request
+from collections import Counter
+from PIL import Image, ImageDraw
+import cv2
+
+IG_DIR = "downloads"
+S3_DIR = "s3_media"
+CMP_DIR = "comparisons"
+COOKIES = "cookies.txt"
+CHECKPOINT = "analysis_checkpoint.jsonl"
+YOLO_MODEL = "yolov8s.pt"
+CONF = 0.30
+CLIP_LO = 0.20
+CLIP_HI = 0.90
+IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
+ANIMALS = {"bird", "cat", "dog", "horse", "sheep", "cow",
+           "elephant", "bear", "zebra", "giraffe"}
+
+
+def is_ig_post(u):
+    return bool(re.search(r"instagram\.com/(p|reel|reels|tv|stories)/", u or ""))
+
+
+# ---------------- CLIP ----------------
+_clip = None
+def get_clip():
+    global _clip
+    if _clip is None:
+        import torch, open_clip
+        model, _, preprocess = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai")
+        model.eval()
+        _clip = (model, preprocess, torch)
+    return _clip
+
+def embed(pil):
+    model, preprocess, torch = get_clip()
+    with torch.no_grad():
+        f = model.encode_image(preprocess(pil).unsqueeze(0))
+        return f / f.norm(dim=-1, keepdim=True)
+
+def cosine(a, b):
+    _m, _p, torch = get_clip()
+    with torch.no_grad():
+        return float((a * b).sum().item())
+
+
+# ---------------- YOLO ----------------
+_yolo = None
+def get_yolo():
+    global _yolo
+    if _yolo is None:
+        from ultralytics import YOLO
+        _yolo = YOLO(YOLO_MODEL)
+    return _yolo
+
+def detect_animals(pil_img):
+    try:
+        res = get_yolo().predict(pil_img, conf=CONF, verbose=False)
+    except Exception:
+        return 0.0, set()
+    cat_conf, seen = 0.0, set()
+    for r in res:
+        for b in getattr(r, "boxes", []):
+            name = r.names[int(b.cls)]
+            if name in ANIMALS:
+                seen.add(name)
+            if name == "cat":
+                cat_conf = max(cat_conf, float(b.conf))
+    return cat_conf, seen
+
+
+# ---------------- media -> PIL ----------------
+def img_pils(path):
+    try:
+        return [Image.open(path).convert("RGB")]
+    except Exception:
+        return []
+
+def vid_pils(path, frames=8):
+    out = []
+    try:
+        cap = cv2.VideoCapture(path)
+        n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+        if n > 0:
+            for i in range(1, frames + 1):
+                cap.set(cv2.CAP_PROP_POS_FRAMES, int(n * i / (frames + 1)))
+                ok, fr = cap.read()
+                if ok:
+                    out.append(Image.fromarray(cv2.cvtColor(fr, cv2.COLOR_BGR2RGB)))
+        cap.release()
+    except Exception:
+        pass
+    return out
+
+def media_pils(path):
+    ext = os.path.splitext(path)[1].lower()
+    if ext in VID_EXT:
+        return vid_pils(path)
+    if ext in IMG_EXT:
+        return img_pils(path)
+    return []
+
+
+def s3_download(url, dest):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=60) as r, open(dest, "wb") as f:
+        f.write(r.read())
+
+def ig_download(url, dest):
+    os.makedirs(dest, exist_ok=True)
+    cmd = [sys.executable, "-m", "gallery_dl", "-D", dest,
+           "--write-metadata", "--sleep-request", "2.0-4.0", "--retries", "2"]
+    if os.path.exists(COOKIES):
+        cmd += ["--cookies", COOKIES]
+    cmd.append(url)
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+def ig_media_files(dest):
+    if not os.path.isdir(dest):
+        return []
+    return [os.path.join(dest, f) for f in sorted(os.listdir(dest))
+            if os.path.splitext(f)[1].lower() in (IMG_EXT | VID_EXT)]
+
+def read_caption(dest):
+    for fn in sorted(glob.glob(os.path.join(dest, "*.json"))):
+        try:
+            d = json.load(open(fn, encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(d, dict):
+            for k in ("description", "caption", "title"):
+                if d.get(k):
+                    return str(d[k]).strip()
+    return ""
+
+
+def safe_name(n):
+    n = re.sub(r"[^\w\s-]", "", n.strip())
+    return re.sub(r"\s+", "_", n) or "unknown"
+
+def find_sheet_csv():
+    best = None
+    for p in sorted(glob.glob("*.csv")):
+        try:
+            hdr = open(p, encoding="utf-8").readline().lower()
+        except Exception:
+            continue
+        if "link of video" in hdr and ("s3_link" in hdr or "submitted link" in hdr):
+            best = p
+    return best
+
+def to_pct(c):
+    return max(0, min(100, round((c - CLIP_LO) / (CLIP_HI - CLIP_LO) * 100)))
+
+def verdict(pct):
+    if pct is None:
+        return "NO COMPARISON"
+    if pct >= 85:
+        return "SAME"
+    if pct >= 70:
+        return "LIKELY SAME"
+    if pct >= 50:
+        return "UNCERTAIN"
+    return "DIFFERENT"
+
+def cat_label(conf, seen, has_media):
+    if not has_media:
+        return "no media"
+    if conf >= CONF:
+        return f"CAT ✓ ({round(conf*100)}%)"
+    others = seen - {"cat"}
+    return "no cat (saw: " + ", ".join(sorted(others)) + ")" if others else "no cat"
+
+def montage(s3_im, ig_im, out, caption):
+    H = 460
+    def rs(im):
+        if im is None:
+            return Image.new("RGB", (int(H * 0.7), H), (50, 50, 50))
+        return im.resize((max(1, int(im.width * H / im.height)), H))
+    a, b = rs(s3_im), rs(ig_im)
+    canvas = Image.new("RGB", (a.width + b.width + 30, H + 46), (18, 18, 18))
+    canvas.paste(a, (10, 36)); canvas.paste(b, (a.width + 20, 36))
+    d = ImageDraw.Draw(canvas)
+    d.text((12, 12), "CHAT UPLOAD", fill=(255, 255, 255))
+    d.text((a.width + 22, 12), "INSTAGRAM  " + caption, fill=(255, 255, 255))
+    canvas.save(out)
+
+
+def load_done():
+    done = {}
+    if os.path.exists(CHECKPOINT):
+        for line in open(CHECKPOINT, encoding="utf-8"):
+            line = line.strip()
+            if line:
+                try:
+                    r = json.loads(line)
+                    done[r["label"]] = r
+                except Exception:
+                    pass
+    return done
+
+
+def build_reports(done):
+    results = sorted(done.values(), key=lambda r: r["idx"])
+    if not results:
+        return
+    fields = ["idx", "name", "match_verdict", "similarity", "instagram_has_cat",
+              "chat_image_has_cat", "instagram_caption", "instagram_link",
+              "chat_link", "comparison_image", "note"]
+    with open("analysis_results.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        for r in results:
+            w.writerow({k: r.get(k, "") for k in fields})
+
+    order = {"DIFFERENT": 0, "UNCERTAIN": 1, "LIKELY SAME": 2, "SAME": 3, "NO COMPARISON": 4}
+    ranked = sorted(results, key=lambda r: (order.get(r["match_verdict"], 5),
+                                            r.get("similarity_num", 999)))
+    vcolor = {"SAME": "#137333", "LIKELY SAME": "#188038", "UNCERTAIN": "#b06000",
+              "DIFFERENT": "#c5221f", "NO COMPARISON": "#5f6368"}
+    tally = Counter(r["match_verdict"] for r in results)
+    doc = ["<html><head><meta charset='utf-8'><title>Sheet analysis</title><style>",
+           "body{font-family:-apple-system,Arial,sans-serif;background:#111;color:#eee;padding:20px}",
+           ".row{margin:16px 0;padding:12px;background:#1c1c1c;border-radius:10px}",
+           ".v{font-weight:700;padding:2px 8px;border-radius:6px;color:#fff}",
+           ".cat{display:inline-block;margin:6px 8px 0 0;padding:2px 8px;border-radius:6px;background:#263238}",
+           "img{max-width:100%;border-radius:8px;margin-top:8px}",
+           ".cap{margin-top:8px;color:#cfd8dc;white-space:pre-wrap}.muted{color:#999;font-size:13px}",
+           ".sum{background:#222;padding:10px 14px;border-radius:8px;margin-bottom:12px}",
+           "</style></head><body><h1>Instagram vs Chat — full sheet</h1>"]
+    doc.append("<div class='sum'>" + " &nbsp; ".join(
+        f"<b>{k}</b>: {tally.get(k,0)}" for k in
+        ["SAME", "LIKELY SAME", "UNCERTAIN", "DIFFERENT", "NO COMPARISON"]) +
+        f" &nbsp; | &nbsp; total analyzed: {len(results)}</div>")
+    for r in ranked:
+        c = vcolor.get(r["match_verdict"], "#5f6368")
+        doc.append(f"<div class='row'><span class='v' style='background:{c}'>{r['match_verdict']}</span>"
+                   f" <b> {html.escape(str(r['name']))}</b> "
+                   f"<span class='muted'>similarity {r['similarity']} · row {r['idx']}</span><br>"
+                   f"<span class='cat'>Instagram: {html.escape(r['instagram_has_cat'])}</span>"
+                   f"<span class='cat'>Chat: {html.escape(r['chat_image_has_cat'])}</span>")
+        if r.get("instagram_caption"):
+            doc.append(f"<div class='cap'><b>Caption:</b> {html.escape(r['instagram_caption'])}</div>")
+        if r.get("note"):
+            doc.append(f"<div class='muted'>{html.escape(r['note'])}</div>")
+        if r.get("comparison_image") and os.path.exists(r["comparison_image"]):
+            doc.append(f"<img src='{r['comparison_image']}' loading='lazy'>")
+        doc.append("</div>")
+    doc.append("</body></html>")
+    open("analysis_report.html", "w", encoding="utf-8").write("\n".join(doc))
+
+
+def main():
+    csv_path = sys.argv[1] if len(sys.argv) > 1 else find_sheet_csv()
+    if not csv_path or not os.path.exists(csv_path):
+        print('Could not find the sheet CSV. Pass it: python3 analyze_sheet.py "sheet.csv"')
+        sys.exit(1)
+    print(f"Reading: {csv_path}")
+    print("Loading models (first run downloads them)...")
+    try:
+        get_clip()
+    except Exception as e:
+        print(f"\nERROR: CLIP not available ({e}).")
+        print("Install:  python3 -m pip install --user --break-system-packages -U open_clip_torch")
+        sys.exit(1)
+    try:
+        get_yolo()
+    except Exception as e:
+        print(f"WARNING: YOLO not available ({e}); cat detection skipped.")
+
+    os.makedirs(S3_DIR, exist_ok=True)
+    os.makedirs(CMP_DIR, exist_ok=True)
+
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    todo = [(i, r) for i, r in enumerate(rows, start=1)
+            if is_ig_post(r.get("link of video", ""))]
+    print(f"{len(todo)} rows have an Instagram post/reel/story link.\n")
+
+    done = load_done()
+    ckpt = open(CHECKPOINT, "a", encoding="utf-8")
+    processed = 0
+
+    for i, row in todo:
+        name = (row.get("name") or "").strip()
+        ig_link = (row.get("link of video") or "").strip()
+        photo = (row.get("photo_s3_link") or "").strip()
+        video = (row.get("video_s3_link") or "").strip()
+        chat_link = photo or video
+        label = f"{i:04d}_{safe_name(name)}"
+        if label in done:
+            continue
+        processed += 1
+        print(f"[{processed}] row {i}  {name}")
+        note = ""
+
+        # 1. Instagram media (resume: skip if already downloaded)
+        ig_dir = os.path.join(IG_DIR, label)
+        if not ig_media_files(ig_dir):
+            r = ig_download(ig_link, ig_dir)
+            if not ig_media_files(ig_dir):
+                err = (r.stderr or r.stdout).strip().splitlines()
+                note = "IG download failed: " + (err[-1] if err else "unknown")
+        ig_files = ig_media_files(ig_dir)
+        ig_imgs = []
+        for f in ig_files:
+            ig_imgs += media_pils(f)
+
+        # 2. chat media
+        s3_imgs = []
+        if chat_link:
+            ext = os.path.splitext(chat_link.split("?")[0])[1] or ".jpg"
+            s3_path = os.path.join(S3_DIR, label + ext)
+            try:
+                if not os.path.exists(s3_path):
+                    s3_download(chat_link, s3_path)
+                s3_imgs = media_pils(s3_path)
+            except Exception as e:
+                note = (note + "; " if note else "") + f"chat download failed: {e}"
+
+        # 3. semantic comparison
+        best = None
+        if ig_imgs and s3_imgs:
+            chat_embs = [embed(im) for im in s3_imgs]
+            for im in ig_imgs:
+                e = embed(im)
+                for ce in chat_embs:
+                    cc = cosine(e, ce)
+                    if best is None or cc > best[0]:
+                        best = (cc, im)
+        pct = to_pct(best[0]) if best else None
+        v = verdict(pct)
+        sim = f"{pct}%" if pct is not None else "-"
+
+        # 4. cat detection
+        ig_conf, ig_seen = 0.0, set()
+        for im in ig_imgs:
+            cf, s = detect_animals(im); ig_conf = max(ig_conf, cf); ig_seen |= s
+        s3_conf, s3_seen = 0.0, set()
+        for im in s3_imgs:
+            cf, s = detect_animals(im); s3_conf = max(s3_conf, cf); s3_seen |= s
+
+        # 5. caption
+        caption = read_caption(ig_dir)
+
+        cmp_img = os.path.join(CMP_DIR, f"{label}.jpg")
+        try:
+            montage(s3_imgs[0] if s3_imgs else None,
+                    best[1] if best else (ig_imgs[0] if ig_imgs else None),
+                    cmp_img, f"{v} ({sim})")
+        except Exception:
+            cmp_img = ""
+
+        result = {
+            "idx": i, "label": label, "name": name,
+            "match_verdict": v, "similarity": sim,
+            "similarity_num": pct if pct is not None else 999,
+            "instagram_has_cat": cat_label(ig_conf, ig_seen, bool(ig_imgs)),
+            "chat_image_has_cat": cat_label(s3_conf, s3_seen, bool(s3_imgs)),
+            "instagram_caption": caption,
+            "instagram_link": ig_link, "chat_link": chat_link,
+            "comparison_image": cmp_img, "note": note,
+        }
+        print(f"   {v} ({sim}) | IG: {result['instagram_has_cat']} | chat: {result['chat_image_has_cat']}"
+              + (f" | {note}" if note else ""))
+        ckpt.write(json.dumps(result, ensure_ascii=False) + "\n"); ckpt.flush()
+        done[label] = result
+
+        if processed % 10 == 0:
+            build_reports(done)  # periodic refresh so you can peek mid-run
+
+    ckpt.close()
+    build_reports(done)
+
+    print("\n" + "=" * 60)
+    print("Verdicts:", dict(Counter(r["match_verdict"] for r in done.values())))
+    print(f"Analyzed {len(done)} people with Instagram links.")
+    print(f"\nTable  : {os.path.abspath('analysis_results.csv')}")
+    print(f"Report : {os.path.abspath('analysis_report.html')}")
+    print("Open the report with:  open analysis_report.html")
+    print("\nIf many rows show 'IG download failed' (Instagram throttling),")
+    print("wait ~15 min and run the same command again — it resumes where it left off.")
+
+
+if __name__ == "__main__":
+    main()
