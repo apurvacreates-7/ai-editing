@@ -56,6 +56,7 @@ IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
 ANIMALS = {"bird", "cat", "dog", "horse", "sheep", "cow",
            "elephant", "bear", "zebra", "giraffe"}
+WANT_FOLLOWERS = False  # set by the "followers" command-line arg
 
 
 def is_ig_post(u):
@@ -196,17 +197,80 @@ def ig_media_files(dest):
     return [os.path.join(dest, f) for f in sorted(os.listdir(dest))
             if os.path.splitext(f)[1].lower() in (IMG_EXT | VID_EXT)]
 
-def read_caption(dest):
+def read_meta(dest):
     for fn in sorted(glob.glob(os.path.join(dest, "*.json"))):
         try:
             d = json.load(open(fn, encoding="utf-8"))
         except Exception:
             continue
         if isinstance(d, dict):
-            for k in ("description", "caption", "title"):
-                if d.get(k):
-                    return str(d[k]).strip()
+            return d
+    return {}
+
+def _dig_num(d, keys):
+    """First numeric value (>=0) under any of `keys`, searched recursively."""
+    stack = [d]
+    while stack:
+        x = stack.pop()
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k.lower() in keys and isinstance(v, (int, float)) and v >= 0:
+                    return int(v)
+            stack.extend(x.values())
+        elif isinstance(x, (list, tuple)):
+            stack.extend(x)
     return ""
+
+def _dig_str(d, keys):
+    stack = [d]
+    while stack:
+        x = stack.pop()
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k.lower() in keys and isinstance(v, str) and v.strip():
+                    return v.strip()
+            stack.extend(x.values())
+        elif isinstance(x, (list, tuple)):
+            stack.extend(x)
+    return ""
+
+def read_caption(dest):
+    m = read_meta(dest)
+    for k in ("description", "caption", "title"):
+        if m.get(k):
+            return str(m[k]).strip()
+    return _dig_str(m, {"description", "caption"})
+
+def post_stats(dest):
+    m = read_meta(dest)
+    return {
+        "likes": _dig_num(m, {"likes", "like_count"}),
+        "comments": _dig_num(m, {"comments", "comment_count"}),
+        "views": _dig_num(m, {"video_view_count", "view_count", "views",
+                              "play_count", "video_play_count"}),
+        "username": _dig_str(m, {"username", "owner_username"}),
+    }
+
+_follower_cache = {}
+def fetch_followers(username):
+    if not username:
+        return ""
+    if username in _follower_cache:
+        return _follower_cache[username]
+    cmd = [sys.executable, "-m", "gallery_dl", "-j", "--range", "1-1",
+           "--sleep-request", "2.0-4.0"]
+    if os.path.exists(COOKIES):
+        cmd += ["--cookies", COOKIES]
+    cmd.append(f"https://www.instagram.com/{username}/")
+    val = ""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        data = json.loads(r.stdout)
+        val = _dig_num(data, {"followers", "follower_count", "edge_followed_by"})
+    except Exception:
+        val = ""
+    _follower_cache[username] = val
+    return val
 
 
 def safe_name(n):
@@ -280,7 +344,8 @@ def build_reports(done):
     if not results:
         return
     fields = ["idx", "name", "match_verdict", "similarity", "instagram_has_cat",
-              "chat_image_has_cat", "chat_ai_wordmark", "instagram_ai_wordmark",
+              "chat_image_has_cat", "ig_username", "followers", "likes",
+              "comments", "views", "chat_ai_wordmark", "instagram_ai_wordmark",
               "instagram_caption", "instagram_link",
               "chat_link", "comparison_image", "note"]
     with open("analysis_results.csv", "w", newline="", encoding="utf-8") as f:
@@ -315,6 +380,11 @@ def build_reports(done):
                    f"<span class='muted'>similarity {r['similarity']} · row {r['idx']}</span><br>"
                    f"<span class='cat'>Instagram: {html.escape(r['instagram_has_cat'])}</span>"
                    f"<span class='cat'>Chat: {html.escape(r['chat_image_has_cat'])}</span>")
+        uname = r.get("ig_username", "")
+        stat_bits = " · ".join(f"{k}: {r.get(k, '')}" for k in ("followers", "likes", "comments", "views")
+                               if str(r.get(k, "")) != "")
+        if uname or stat_bits:
+            doc.append(f"<div class='muted'>@{html.escape(str(uname))} &nbsp; {html.escape(stat_bits)}</div>")
         mark = r.get("chat_ai_wordmark") or r.get("instagram_ai_wordmark")
         if mark:
             where = []
@@ -335,7 +405,13 @@ def build_reports(done):
 
 
 def main():
-    csv_path = sys.argv[1] if len(sys.argv) > 1 else find_sheet_csv()
+    global WANT_FOLLOWERS
+    args = [a for a in sys.argv[1:]]
+    WANT_FOLLOWERS = any(a.lower() == "followers" for a in args)
+    csv_args = [a for a in args if a.lower() != "followers"]
+    csv_path = csv_args[0] if csv_args else find_sheet_csv()
+    if WANT_FOLLOWERS:
+        print("Follower lookup ENABLED (extra request per person — slower/more throttling).")
     if not csv_path or not os.path.exists(csv_path):
         print('Could not find the sheet CSV. Pass it: python3 analyze_sheet.py "sheet.csv"')
         sys.exit(1)
@@ -434,6 +510,10 @@ def main():
         # 5. caption
         caption = read_caption(ig_dir)
 
+        # 5b. engagement stats from the post metadata (free) + optional followers
+        stats = post_stats(ig_dir)
+        followers = fetch_followers(stats["username"]) if (WANT_FOLLOWERS and ig_files) else ""
+
         # 6. AI wordmark (visible AI text) on chat upload and IG media
         chat_ai = ai_terms_for(s3_imgs) if ocr_ok else []
         ig_ai = ai_terms_for(ig_imgs) if ocr_ok else []
@@ -453,6 +533,9 @@ def main():
             "instagram_has_cat": cat_label(ig_conf, ig_seen, bool(ig_imgs)),
             "chat_image_has_cat": cat_label(s3_conf, s3_seen, bool(s3_imgs)),
             "instagram_caption": caption,
+            "ig_username": stats["username"],
+            "likes": stats["likes"], "comments": stats["comments"],
+            "views": stats["views"], "followers": followers,
             "chat_ai_wordmark": ", ".join(chat_ai),
             "instagram_ai_wordmark": ", ".join(ig_ai),
             "instagram_link": ig_link, "chat_link": chat_link,
@@ -463,8 +546,11 @@ def main():
             ai_note += f" | chat AI mark: {', '.join(chat_ai)}"
         if ig_ai:
             ai_note += f" | IG AI mark: {', '.join(ig_ai)}"
+        stat_note = f" | likes:{stats['likes']} comments:{stats['comments']} views:{stats['views']}"
+        if WANT_FOLLOWERS:
+            stat_note += f" followers:{followers}"
         print(f"   {v} ({sim}) | IG: {result['instagram_has_cat']} | chat: {result['chat_image_has_cat']}"
-              + ai_note + (f" | {note}" if note else ""))
+              + stat_note + ai_note + (f" | {note}" if note else ""))
         ckpt.write(json.dumps(result, ensure_ascii=False) + "\n"); ckpt.flush()
         done[label] = result
 

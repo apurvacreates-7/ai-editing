@@ -119,6 +119,8 @@ def main():
                 a.get("similarity", ""),
                 a.get("instagram_has_cat", ""),
                 a.get("chat_image_has_cat", ""),
+                a.get("ig_username", ""), a.get("followers", ""),
+                a.get("likes", ""), a.get("comments", ""), a.get("views", ""),
                 a.get("instagram_caption", ""),
                 marks, note,
             ])
@@ -163,7 +165,8 @@ def main():
     write_csv("sheet1_ig_reviewed.csv",
               ["row", "name", "ig_link_type", "instagram_link", "chat_media_type",
                "chat_media_link", "match_verdict", "similarity", "instagram_has_cat",
-               "chat_has_cat", "instagram_caption", "ai_wordmark", "notes"], s1)
+               "chat_has_cat", "ig_username", "followers", "likes", "comments",
+               "views", "instagram_caption", "ai_wordmark", "notes"], s1)
     write_csv("sheet2_no_iglink_cats.csv",
               ["row", "name", "media_type", "chat_media_link", "has_cat",
                "cat_detail", "ai_or_invalid_flag"], s2)
