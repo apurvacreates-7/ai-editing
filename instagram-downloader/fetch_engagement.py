@@ -41,7 +41,7 @@ def load_ckpt():
 
 def fetch(url):
     cmd = ["yt-dlp", "--dump-json", "--skip-download", "--no-warnings",
-           "--sleep-requests", "2"]
+           "--ignore-no-formats-error", "--sleep-requests", "2"]
     if os.path.exists(COOKIES):
         cmd += ["--cookies", COOKIES]
     cmd.append(url)
