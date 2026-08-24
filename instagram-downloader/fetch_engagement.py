@@ -104,11 +104,12 @@ def main():
         e = done.get(int(r["idx"]))
         if not e:
             continue
+        # overwrite with the latest values pulled today
         if e.get("comments") is not None:
             r["comments"] = e["comments"]
         if e.get("views") is not None:
             r["views"] = e["views"]
-        if (not str(r.get("likes", "")).strip()) and e.get("likes") is not None:
+        if e.get("likes") is not None:
             r["likes"] = e["likes"]
 
     with open(ANALYSIS, "w", newline="", encoding="utf-8") as f:
