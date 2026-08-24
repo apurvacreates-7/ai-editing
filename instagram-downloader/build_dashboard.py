@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v9 (2025-08-24) — trust match, positive cat badges"
+VERSION = "v10 (2025-08-24) — pending fix, symmetry, invalid-link copy"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -146,13 +146,11 @@ def simval(d):
         return -1
 
 def pending_reason(link, note):
-    """Why a valid IG link produced no comparison -> (kind, human reason)."""
+    """Why a valid IG link produced no comparison -> (label, human reason)."""
     l = (link or "").lower(); n = (note or "").lower()
     if "/stories/" in l or "no results" in n or "story could not be found" in n:
-        return "story", "Instagram Story — expired after 24 h, nothing to fetch"
-    if "400" in n or "bad request" in n or "not found" in n or "login" in n:
-        return "throttle", "Rate-limited, or the post is private/removed — retry after a cooldown"
-    return "other", "Couldn’t download the post"
+        return "Invalid link", "Submitted a Story link — Stories expire after 24 h, so it can’t be verified"
+    return "Couldn’t fetch", "Submitted a link, but the post couldn’t be fetched (private, removed, or rate-limited)"
 
 def t1_status(v):
     if v in ("SAME", "LIKELY SAME"):
@@ -278,26 +276,23 @@ def build():
         is_ai = bool(d["ai"] or d["ai_mark"])
         vlabel, vcls = vmap.get(d["verdict"], (d["verdict"], "mut"))
         vicon = IC_CHECK if vcls == "ok" else (IC_X if vcls == "bad" else "")
+        # a valid IG link that never downloaded reads as PENDING or NO COMPARISON
+        is_pending = t1_status(d["verdict"]) == "pending"
+        sim = str(d["similarity"] or "")
+        sim_txt = f" · {sim}" if (sim and sim != "-") else ""
         # only show cat badges when a cat is positively detected — the detector's
-        # "no cat" is unreliable (it misses fluffy/held/yawning cats), so never
-        # claim "No cat".
-        badges = [badge(vlabel + (f" · {d['similarity']}" if d["similarity"] else ""), vcls, vicon)]
+        # "no cat" is unreliable (it misses fluffy/held/yawning cats).
+        badges = [badge(vlabel + sim_txt, vcls, vicon)]
         if cat_chat:
             badges.append(badge("Cat in chat", "ok", IC_CHECK))
-        if d["verdict"] != "PENDING" and cat_ig:
+        if not is_pending and cat_ig:
             badges.append(badge("Cat in post", "ok", IC_CHECK))
         if is_ai:
             badges.append(badge("AI content", "bad", IC_X))
         pend_meta = ""
-        if d["verdict"] == "PENDING":
-            kind, why = pending_reason(d["link"], d.get("note", ""))
-            pend_meta = f"<div class='meta'>{esc(why)}</div>"
-            if kind == "story":
-                act = action("grey", "Skip", "Expired Story — no post to review")
-            elif kind == "throttle":
-                act = action("grey", "Retry later", "Rate-limited — fetch again after a cooldown")
-            else:
-                act = action("grey", "Fetch", "Post couldn’t be downloaded")
+        if is_pending:
+            label, why = pending_reason(d["link"], d.get("note", ""))
+            act = action("grey", label, why)
         elif is_ai:
             act = action("red", "Disqualify", "AI-generated post")
         elif d["verdict"] == "DIFFERENT":
@@ -468,7 +463,8 @@ figcaption svg{{opacity:.8}}
 .cap.clamp{{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}}
 .more{{border:0;background:none;color:var(--purple);font-size:13px;font-weight:600;cursor:pointer;padding:4px 0 0}}
 .nocap{{font-size:13px;color:var(--mut);font-style:italic}}
-.action{{margin-top:14px;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px}}
+.action{{margin-top:auto;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px}}
+.badges,.meta,.visit,.capwrap{{margin-bottom:0}}
 .aicon{{width:30px;height:30px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;color:#fff}}
 .atxt{{display:flex;flex-direction:column;gap:1px}}
 .alabel{{text-transform:uppercase;letter-spacing:.07em;font-size:11px;font-weight:800}}
