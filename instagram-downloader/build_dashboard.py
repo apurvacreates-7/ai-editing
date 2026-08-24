@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v11 (2025-08-24) — force-disqualify, pending→invalid, cat sort, has/hasn't chips"
+VERSION = "v12 (2025-08-24) — Freestand branding, cleaned footer, cat filter on Tab 1"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -57,6 +57,17 @@ IC_CHECK = "<svg viewBox='0 0 24 24' width='13' height='13' fill='none' stroke='
 IC_X = "<svg viewBox='0 0 24 24' width='13' height='13' fill='none' stroke='currentColor' stroke-width='3'><path d='M6 6l12 12M18 6L6 18'/></svg>"
 IC_BANG = "<svg viewBox='0 0 24 24' width='13' height='13' fill='none' stroke='currentColor' stroke-width='3'><path d='M12 6v8M12 18h.01'/></svg>"
 IC_BELL = "<svg viewBox='0 0 24 24' width='13' height='13' fill='none' stroke='currentColor' stroke-width='2.4'><path d='M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0'/></svg>"
+
+# Freestand logo — gift-box glyph + wordmark, in Freestand navy (self-contained inline SVG)
+FS_GIFT = ("<svg viewBox='0 0 44 44' width='30' height='30' fill='none' stroke='#14315f' "
+           "stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'>"
+           "<path d='M22 13C19.5 6 13 5 11 8.2c-1.7 2.8 1.4 4.8 5 4.8'/>"
+           "<path d='M22 13c2.5-7 9-8 11-4.8 1.7 2.8-1.4 4.8-5 4.8'/>"
+           "<rect x='6' y='13' width='32' height='7.5' rx='1'/>"
+           "<rect x='8.5' y='20.5' width='27' height='17' rx='1'/>"
+           "<path d='M22 13v24.5'/></svg>")
+FS_LOGO = (f"<span class='fs-gift'>{FS_GIFT}</span>"
+           f"<span class='fs-word'>FREESTAND</span>")
 
 
 def safe_name(n):
@@ -262,7 +273,10 @@ def build():
     t2.sort(key=lambda d: (0 if d["klass"] == "cat" else 1, -d.get("conf", -1)))
 
     # counts for filter chips
-    s1 = Counter(t1_status(d["verdict"]) for d in t1)
+    def t1_has_cat(d):
+        return cat_yes(d["ig_cat"]) or cat_yes(d["chat_cat"])
+    s1 = Counter(t1_status(d["verdict"]) for d in t1)         # kept for the console summary
+    s1c = Counter("yes" if t1_has_cat(d) else "no" for d in t1)
     s2 = Counter("yes" if d["klass"] == "cat" else "no" for d in t2)
 
     # ---------- render helpers ----------
@@ -353,7 +367,8 @@ def build():
                  + pend_meta
                  + (f"<div class='meta'>{' &nbsp;·&nbsp; '.join(meta)}</div>" if meta else "")
                  + visit(d["link"]) + caption_block(d["caption"]) + act)
-        c1.append(f"<article class='card' data-s='{t1_status(d['verdict'])}' data-name='{esc(d['name'].lower())}'>{inner}</article>")
+        cat_flag = "yes" if (cat_ig or cat_chat) else "no"
+        c1.append(f"<article class='card' data-s='{t1_status(d['verdict'])}' data-cat='{cat_flag}' data-name='{esc(d['name'].lower())}'>{inner}</article>")
 
     # ---- Tab 2 ----
     c2 = []
@@ -397,10 +412,8 @@ def build():
          "Shared an Instagram link. Check the post matches their photo and shows a cat.",
          c1,
          f"<button class='chip on' data-f='all'>All · {len(t1)}</button>"
-         f"<button class='chip' data-f='match'>Match · {s1['match']}</button>"
-         f"<button class='chip' data-f='different'>Different · {s1['different']}</button>"
-         f"<button class='chip' data-f='unclear'>Unclear · {s1['unclear']}</button>"
-         f"<button class='chip' data-f='pending'>Not fetched · {s1['pending']}</button>"),
+         f"<button class='chip' data-f='yes'>Has cat · {s1c['yes']}</button>"
+         f"<button class='chip' data-f='no'>Does not have cat · {s1c['no']}</button>"),
         ("No Instagram link", len(t2),
          "Sent a cat but no link. Ask them to post it on Instagram and share the link.",
          c2,
@@ -453,6 +466,9 @@ def build():
 body{{margin:0;font-family:var(--sans);color:var(--body);background:var(--bg);-webkit-font-smoothing:antialiased}}
 .app{{display:flex;align-items:flex-start;max-width:1360px;margin:0 auto}}
 .side{{width:260px;flex:none;position:sticky;top:0;height:100vh;padding:34px 26px;border-right:1px solid var(--line);background:#fff}}
+.logo{{display:flex;align-items:center;gap:9px;margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--line)}}
+.fs-gift{{display:flex;flex:none}}
+.fs-word{{font-weight:800;letter-spacing:.015em;font-size:21px;color:#14315f}}
 .brand{{font-weight:800;letter-spacing:.22em;font-size:13px;color:var(--purple)}}
 .prod{{font-family:var(--serif);font-size:24px;line-height:1.15;color:var(--ink);margin:6px 0 26px}}
 .nav{{display:flex;width:100%;align-items:center;gap:10px;border:0;background:none;cursor:pointer;text-align:left;padding:11px 10px;border-radius:9px;color:var(--body);margin-bottom:2px}}
@@ -524,10 +540,11 @@ main{{padding:26px 18px 60px}} .disp{{font-size:30px}}}}
 </style></head><body>
 <div class=app>
 <aside class=side>
+<div class=logo>{FS_LOGO}</div>
 <div class=brand>WHISKAS</div>
 <div class=prod>Fussy&nbsp;Cat<br>UGC Review</div>
 <nav>{nav}</nav>
-<div class=foot>{esc(summary)}<br><br>#MyFussyCatAd<br><span style="opacity:.6">{esc(VERSION)}</span></div>
+<div class=foot>{esc(summary)}</div>
 </aside>
 <main>{''.join(panels)}</main>
 </div>
