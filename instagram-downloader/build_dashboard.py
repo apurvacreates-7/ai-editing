@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v6 (2025-08-18) — lightbox + read-more + link button"
+VERSION = "v7 (2025-08-24) — reasons on 'not fetched' rows"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -145,6 +145,15 @@ def simval(d):
     except Exception:
         return -1
 
+def pending_reason(link, note):
+    """Why a valid IG link produced no comparison -> (kind, human reason)."""
+    l = (link or "").lower(); n = (note or "").lower()
+    if "/stories/" in l or "no results" in n or "story could not be found" in n:
+        return "story", "Instagram Story — expired after 24 h, nothing to fetch"
+    if "400" in n or "bad request" in n or "not found" in n or "login" in n:
+        return "throttle", "Rate-limited, or the post is private/removed — retry after a cooldown"
+    return "other", "Couldn’t download the post"
+
 def t1_status(v):
     if v in ("SAME", "LIKELY SAME"):
         return "match"
@@ -190,7 +199,7 @@ def build():
                 "chat_cat": a.get("chat_image_has_cat", ""),
                 "likes": a.get("likes", ""), "username": a.get("ig_username", ""),
                 "comments": a.get("comments", ""), "views": a.get("views", ""),
-                "caption": a.get("instagram_caption", ""),
+                "caption": a.get("instagram_caption", ""), "note": a.get("note", ""),
                 "ai": ai, "ai_mark": a.get("instagram_ai_wordmark", "")})
             continue
 
@@ -275,8 +284,16 @@ def build():
                                 "ok" if cat_ig else "bad"))
         if is_ai:
             badges.append(badge("AI content", "bad"))
+        pend_meta = ""
         if d["verdict"] == "PENDING":
-            act = action("grey", "Fetch", "Post not downloaded yet")
+            kind, why = pending_reason(d["link"], d.get("note", ""))
+            pend_meta = f"<div class='meta'>{esc(why)}</div>"
+            if kind == "story":
+                act = action("grey", "Skip", "Expired Story — no post to review")
+            elif kind == "throttle":
+                act = action("grey", "Retry later", "Rate-limited — fetch again after a cooldown")
+            else:
+                act = action("grey", "Fetch", "Post couldn’t be downloaded")
         elif is_ai:
             act = action("red", "Disqualify", "AI-generated post")
         elif not cat_ig:
@@ -300,6 +317,7 @@ def build():
                  + f"<div class='pair'>{figure(d['chat_img'],'Chat upload','chat',d['chat_vid'])}"
                  f"{figure(d['ig_img'],'Instagram post','ig')}</div>"
                  f"<div class='badges'>{''.join(badges)}</div>"
+                 + pend_meta
                  + (f"<div class='meta'>{' &nbsp;·&nbsp; '.join(meta)}</div>" if meta else "")
                  + visit(d["link"]) + caption_block(d["caption"]) + act)
         c1.append(f"<article class='card' data-s='{t1_status(d['verdict'])}' data-name='{esc(d['name'].lower())}'>{inner}</article>")

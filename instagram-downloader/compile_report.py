@@ -108,7 +108,20 @@ def main():
             a = analysis.get(i, {})
             got = bool(a)
             kind = ig_kind(link)
-            note = "Story link (expires after 24h — may be unavailable)" if kind == "stories" else ""
+            verdict_now = a.get("match_verdict", "")
+            note = ""
+            if kind == "stories":
+                note = "Story link — expires after 24h, may be unavailable"
+            if (not a) or verdict_now in ("NO COMPARISON", ""):
+                nlow = (a.get("note", "") or "").lower()
+                if kind == "stories" or "no results" in nlow or "story could not be found" in nlow:
+                    note = "Not fetched: Instagram Story expired (24h) — cannot be downloaded"
+                elif "400" in nlow or "bad request" in nlow or "not found" in nlow or "login" in nlow:
+                    note = "Not fetched: rate-limited, or the post is private/removed — retry after a cooldown"
+                elif not a:
+                    note = "Not fetched yet — run analyze_sheet.py after a cooldown"
+                else:
+                    note = "Not fetched: post could not be downloaded"
             ig_mark = a.get("instagram_ai_wordmark", "")
             chat_mark = a.get("chat_ai_wordmark", "")
             marks = "; ".join(x for x in [f"chat: {chat_mark}" if chat_mark else "",
