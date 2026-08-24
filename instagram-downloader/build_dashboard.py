@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v10 (2025-08-24) — pending fix, symmetry, invalid-link copy"
+VERSION = "v11 (2025-08-24) — force-disqualify, pending→invalid, cat sort, has/hasn't chips"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -40,6 +40,12 @@ CONFIRMED_CATS = {n.lower() for n in [
     "Faizal hossain", "Thirunavukkarasu", "PARIMAL KUMAR GAMIT", "Bhuwan Sharma",
     "Ajoy shil", "Alisha mansoor", "Anosh m", "Daler singh", "Doli das",
     "Sarathy", "Senti", "RIKUL SARMA", "Hayat", "Twinkle Dutta", "Ali Ahmad",
+]}
+
+# Names a human reviewed and wants disqualified regardless of the automation.
+FORCE_DISQUALIFY = {n.lower() for n in [
+    "Sara Huma", "Biswarup", "Suraj kumar", "Abhijit Dasgupta", "Ahsan masood",
+    "Akmal Bari", "Vishal Kumar Das", "Neha", "Sarika goes", "Sk Lasammad",
 ]}
 
 # ---- inline icons (currentColor) ----
@@ -72,6 +78,11 @@ def cat_class(s):
     if "saw:" in s.lower():
         return "other"
     return "unclear"
+
+def cat_conf(s):
+    """Pull the detector confidence out of a 'CAT (87%)' style string, for sorting."""
+    m = re.search(r"(\d+)\s*%", s or "")
+    return int(m.group(1)) if m else -1
 
 def load_by_idx(path):
     d = {}
@@ -183,15 +194,29 @@ def build():
         media_link = video or photo
         label = f"{i:04d}_{safe_name(name)}"
         ai = AI_FINDINGS.get(i)
+        has_media = bool(media_link)
+        force_disq = name.strip().lower() in FORCE_DISQUALIFY
+
+        # human-reviewed override: send these people straight to Disqualified
+        if force_disq and (has_media or is_ig(link)):
+            fimg = (embed_any(first_in(os.path.join("s3_media", label + ".*")))
+                    or embed_any(first_in(os.path.join("thumbs", label + ".*"))
+                                 or first_in(os.path.join("uploads_media", label + ".*")), 520, 70))
+            t3.append({"name": name, "row": i, "img": fimg,
+                       "mtype": "video" if video else "photo",
+                       "reason": "Disqualified", "detail": "Reviewed — not a valid entry"})
+            continue
 
         if is_ig(link):
             a = analysis.get(i, {})
+            verdict = a.get("match_verdict", "") or "PENDING"
+            chat_img = embed_any(first_in(os.path.join("s3_media", label + ".*")))
             t1.append({
                 "name": name, "row": i, "link": link,
-                "chat_img": embed_any(first_in(os.path.join("s3_media", label + ".*"))),
+                "chat_img": chat_img,
                 "ig_img": embed_any(first_in(os.path.join("downloads", label, "*"))),
                 "chat_vid": bool(video),
-                "verdict": a.get("match_verdict", "") or "PENDING",
+                "verdict": verdict,
                 "similarity": a.get("similarity", ""),
                 "ig_cat": a.get("instagram_has_cat", ""),
                 "chat_cat": a.get("chat_image_has_cat", ""),
@@ -199,11 +224,16 @@ def build():
                 "comments": a.get("comments", ""), "views": a.get("views", ""),
                 "caption": a.get("instagram_caption", ""), "note": a.get("note", ""),
                 "ai": ai, "ai_mark": a.get("instagram_ai_wordmark", "")})
+            # a valid link that never downloaded is also an unusable link -> Invalid links
+            if t1_status(verdict) == "pending":
+                ltype, _why = pending_reason(link, a.get("note", ""))
+                t4.append({"name": name, "row": i, "link": link,
+                           "ltype": _why, "img": chat_img})
             continue
 
-        has_media = bool(media_link)
         sc = scan.get(i, {})
         klass = cat_class(sc.get("has_cat")) if sc else "unknown"
+        conf = cat_conf(sc.get("has_cat")) if sc else -1
         real_link = bool(link) and not link.lower().startswith("choice-")
         confirmed = name.strip().lower() in CONFIRMED_CATS
         img = embed_any(first_in(os.path.join("thumbs", label + ".*"))
@@ -211,7 +241,8 @@ def build():
         mtype = "video" if video else "photo"
 
         if has_media and confirmed:
-            t2.append({"name": name, "row": i, "img": img, "mtype": mtype, "klass": "cat"})
+            t2.append({"name": name, "row": i, "img": img, "mtype": mtype,
+                       "klass": "cat", "conf": max(conf, 100)})
             continue
         if has_media and ai:
             t3.append({"name": name, "row": i, "img": img, "mtype": mtype,
@@ -223,13 +254,16 @@ def build():
             t4.append({"name": name, "row": i, "link": link, "ltype": ltype, "img": img})
             continue
         if has_media:
-            t2.append({"name": name, "row": i, "img": img, "mtype": mtype, "klass": klass})
+            t2.append({"name": name, "row": i, "img": img, "mtype": mtype,
+                       "klass": klass, "conf": conf})
 
     t1.sort(key=simval, reverse=True)
+    # most aesthetic / clearest cats on top (cats first, by detector confidence)
+    t2.sort(key=lambda d: (0 if d["klass"] == "cat" else 1, -d.get("conf", -1)))
 
     # counts for filter chips
     s1 = Counter(t1_status(d["verdict"]) for d in t1)
-    s2 = Counter("yes" if d["klass"] == "cat" else "verify" for d in t2)
+    s2 = Counter("yes" if d["klass"] == "cat" else "no" for d in t2)
 
     # ---------- render helpers ----------
     def badge(text, cls, icon=""):
@@ -325,13 +359,13 @@ def build():
     c2 = []
     for d in t2:
         if d["klass"] == "cat":
-            cb = badge("Cat detected", "ok", IC_CHECK)
+            cb = badge("Has cat", "ok", IC_CHECK)
             act = action("purple", "Remind", "Ask them to post on Instagram and send the link")
             flag = "yes"
         else:
             cb = badge("Check it’s a cat", "warn")
             act = action("amber", "Verify", "Confirm it’s a cat, then remind them to post & send the link")
-            flag = "verify"
+            flag = "no"
         inner = (head(d["name"], d["row"])
                  + figure(d["img"], d["mtype"], "chat", d["mtype"] == "video")
                  + f"<div class='badges'>{cb}</div>" + act)
@@ -371,8 +405,8 @@ def build():
          "Sent a cat but no link. Ask them to post it on Instagram and share the link.",
          c2,
          f"<button class='chip on' data-f='all'>All · {len(t2)}</button>"
-         f"<button class='chip' data-f='yes'>Cat detected · {s2['yes']}</button>"
-         f"<button class='chip' data-f='verify'>Check it’s a cat · {s2['verify']}</button>"),
+         f"<button class='chip' data-f='yes'>Has cat · {s2['yes']}</button>"
+         f"<button class='chip' data-f='no'>Does not have cat · {s2['no']}</button>"),
         ("Disqualified", len(t3),
          "Not a real cat photo — AI-made or stock content.",
          c3, ""),
@@ -390,12 +424,16 @@ def build():
     panels = []
     for idx, (title, cnt, desc, cards, chips) in enumerate(tabs):
         chip_bar = f"<div class='chips'>{chips}</div>" if chips else ""
+        # Tab 2 (No Instagram link) is browsed by chip only — no search box
+        search_box = "" if idx == 1 else "<input class='search' placeholder='Search a name…'>"
+        toolbar = (f"<div class='toolbar'>{search_box}{chip_bar}</div>"
+                   if (search_box or chip_bar) else "")
         panels.append(
             f"<section class='panel{' on' if idx==0 else ''}' data-p='{idx}'>"
             f"<div class='eye'>Section {idx+1:02d}</div>"
             f"<h2 class='disp'>{esc(title)}</h2>"
             f"<p class='lead'>{esc(desc)}</p><hr>"
-            f"<div class='toolbar'><input class='search' placeholder='Search a name…'>{chip_bar}</div>"
+            f"{toolbar}"
             f"<div class='grid'>{''.join(cards)}</div>"
             f"<div class='noresults' hidden>No matches.</div></section>")
 
@@ -499,13 +537,13 @@ const navs=[...document.querySelectorAll('.nav')],panels=[...document.querySelec
 navs.forEach(n=>n.onclick=()=>{{navs.forEach(x=>x.classList.remove('on'));
 panels.forEach(x=>x.classList.remove('on'));n.classList.add('on');
 panels[+n.dataset.t].classList.add('on');window.scrollTo(0,0);}});
-function apply(p){{const q=(p.querySelector('.search').value||'').toLowerCase().trim();
+function apply(p){{const si=p.querySelector('.search');const q=si?(si.value||'').toLowerCase().trim():'';
 const chip=p.querySelector('.chip.on');const f=chip?chip.dataset.f:'all';let vis=0;
 p.querySelectorAll('.card').forEach(c=>{{const okN=!q||(c.dataset.name||'').includes(q);
 let okF=true;if(f&&f!=='all')okF=(c.dataset.s===f)||(c.dataset.cat===f);
 const s=okN&&okF;c.style.display=s?'':'none';if(s)vis++;}});
 p.querySelector('.noresults').hidden=vis>0;}}
-panels.forEach(p=>{{p.querySelector('.search').addEventListener('input',()=>apply(p));
+panels.forEach(p=>{{const si=p.querySelector('.search');if(si)si.addEventListener('input',()=>apply(p));
 p.querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>{{
 p.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));ch.classList.add('on');apply(p);}});}});
 // read-more (guard no-caption cards; measure full vs clamped height)
@@ -528,7 +566,7 @@ document.addEventListener('keydown',e=>{{if(e.key==='Escape')lb.hidden=true;}});
     mb = os.path.getsize(out) / 1e6
     print(f"\nWrote {out}  ({mb:.1f} MB)")
     print(f"  01 Instagram submissions: {len(t1)}  (match {s1['match']} · different {s1['different']} · unclear {s1['unclear']} · pending {s1['pending']})")
-    print(f"  02 No Instagram link:     {len(t2)}  (cat {s2['yes']} · verify {s2['verify']})")
+    print(f"  02 No Instagram link:     {len(t2)}  (has cat {s2['yes']} · no cat {s2['no']})")
     print(f"  03 Disqualified:          {len(t3)}")
     print(f"  04 Invalid links:         {len(t4)}")
     print("\nOpen it:  open Fussy_cat_dashboard.html")
