@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v7 (2025-08-24) — reasons + no-caption label"
+VERSION = "v8 (2025-08-24) — read-more fixed"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -508,9 +508,10 @@ p.querySelector('.noresults').hidden=vis>0;}}
 panels.forEach(p=>{{p.querySelector('.search').addEventListener('input',()=>apply(p));
 p.querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>{{
 p.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));ch.classList.add('on');apply(p);}});}});
-// read-more
+// read-more (guard no-caption cards; measure full vs clamped height)
 document.querySelectorAll('.capwrap').forEach(w=>{{const cap=w.querySelector('.cap'),btn=w.querySelector('.more');
-if(cap.scrollHeight-cap.clientHeight>2){{btn.hidden=false;
+if(!cap||!btn)return;cap.classList.remove('clamp');const full=cap.scrollHeight;cap.classList.add('clamp');
+if(full-cap.clientHeight>2){{btn.hidden=false;
 btn.onclick=()=>{{const on=cap.classList.toggle('clamp');btn.textContent=on?'Read more':'Read less';}};}}}});
 // lightbox
 const lb=document.getElementById('lb'),lbimg=lb.querySelector('img');
