@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v7 (2025-08-24) — reasons on 'not fetched' rows"
+VERSION = "v7 (2025-08-24) — reasons + no-caption label"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -252,8 +252,8 @@ def build():
                 f"<span>{esc(text)}</span></a>")
 
     def caption_block(text):
-        if not text:
-            return ""
+        if not str(text).strip():
+            return "<div class='capwrap'><div class='nocap'>No caption written</div></div>"
         return (f"<div class='capwrap'><div class='cap clamp'>{esc(text)}</div>"
                 f"<button class='more' hidden>Read more</button></div>")
 
@@ -463,6 +463,7 @@ figcaption svg{{opacity:.8}}
 .cap{{font-family:var(--serif);font-style:italic;font-size:14.5px;line-height:1.5;color:var(--body);white-space:pre-wrap}}
 .cap.clamp{{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}}
 .more{{border:0;background:none;color:var(--purple);font-size:13px;font-weight:600;cursor:pointer;padding:4px 0 0}}
+.nocap{{font-size:13px;color:var(--mut);font-style:italic}}
 .action{{margin-top:14px;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px}}
 .aicon{{width:30px;height:30px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;color:#fff}}
 .atxt{{display:flex;flex-direction:column;gap:1px}}
