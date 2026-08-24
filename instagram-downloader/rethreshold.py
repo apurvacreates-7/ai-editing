@@ -33,7 +33,7 @@ def verdict(pct):
         return "SAME"
     if pct >= 70:
         return "LIKELY SAME"
-    if pct >= 50:
+    if pct >= 60:
         return "UNCERTAIN"
     return "DIFFERENT"
 

@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v8 (2025-08-24) — read-more fixed"
+VERSION = "v9 (2025-08-24) — trust match, positive cat badges"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -278,12 +278,16 @@ def build():
         is_ai = bool(d["ai"] or d["ai_mark"])
         vlabel, vcls = vmap.get(d["verdict"], (d["verdict"], "mut"))
         vicon = IC_CHECK if vcls == "ok" else (IC_X if vcls == "bad" else "")
+        # only show cat badges when a cat is positively detected — the detector's
+        # "no cat" is unreliable (it misses fluffy/held/yawning cats), so never
+        # claim "No cat".
         badges = [badge(vlabel + (f" · {d['similarity']}" if d["similarity"] else ""), vcls, vicon)]
-        if d["verdict"] != "PENDING":
-            badges.append(badge("Cat in post" if cat_ig else "No cat in post",
-                                "ok" if cat_ig else "bad"))
+        if cat_chat:
+            badges.append(badge("Cat in chat", "ok", IC_CHECK))
+        if d["verdict"] != "PENDING" and cat_ig:
+            badges.append(badge("Cat in post", "ok", IC_CHECK))
         if is_ai:
-            badges.append(badge("AI content", "bad"))
+            badges.append(badge("AI content", "bad", IC_X))
         pend_meta = ""
         if d["verdict"] == "PENDING":
             kind, why = pending_reason(d["link"], d.get("note", ""))
@@ -296,12 +300,12 @@ def build():
                 act = action("grey", "Fetch", "Post couldn’t be downloaded")
         elif is_ai:
             act = action("red", "Disqualify", "AI-generated post")
-        elif not cat_ig:
-            act = action("red", "Disqualify", "No cat in the Instagram post")
         elif d["verdict"] == "DIFFERENT":
-            act = action("amber", "Review", "Photo doesn’t match the post — check")
+            act = action("red", "Doesn’t match", "Chat photo doesn’t match the Instagram post")
         elif d["verdict"] == "UNCERTAIN":
-            act = action("amber", "Review", "Not sure it matches — check")
+            act = action("amber", "Review", "Not sure it matches — check the two images")
+        elif not cat_chat and not cat_ig:
+            act = action("green", "Qualified", "Post matches — confirm it’s a cat")
         else:
             act = action("green", "Qualified", "Approve — post matches and shows a cat")
         meta = []
