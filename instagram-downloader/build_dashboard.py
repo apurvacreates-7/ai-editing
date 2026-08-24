@@ -150,7 +150,7 @@ def pending_reason(link, note):
     l = (link or "").lower(); n = (note or "").lower()
     if "/stories/" in l or "no results" in n or "story could not be found" in n:
         return "Invalid link", "Submitted a Story link — Stories expire after 24 h, so it can’t be verified"
-    return "Couldn’t fetch", "Submitted a link, but the post couldn’t be fetched (private, removed, or rate-limited)"
+    return "Couldn’t fetch", "Submitted a link, but the post couldn’t be fetched (private or removed)"
 
 def t1_status(v):
     if v in ("SAME", "LIKELY SAME"):
