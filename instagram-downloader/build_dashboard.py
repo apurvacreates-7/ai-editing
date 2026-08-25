@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v12 (2025-08-24) — Freestand branding, cleaned footer, cat filter on Tab 1"
+VERSION = "v13 (2025-08-24) — embed-ready: Freestand-native look, top tabs, no logos"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -57,17 +57,6 @@ IC_CHECK = "<svg viewBox='0 0 24 24' width='13' height='13' fill='none' stroke='
 IC_X = "<svg viewBox='0 0 24 24' width='13' height='13' fill='none' stroke='currentColor' stroke-width='3'><path d='M6 6l12 12M18 6L6 18'/></svg>"
 IC_BANG = "<svg viewBox='0 0 24 24' width='13' height='13' fill='none' stroke='currentColor' stroke-width='3'><path d='M12 6v8M12 18h.01'/></svg>"
 IC_BELL = "<svg viewBox='0 0 24 24' width='13' height='13' fill='none' stroke='currentColor' stroke-width='2.4'><path d='M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0'/></svg>"
-
-# Freestand logo — gift-box glyph + wordmark, in Freestand navy (self-contained inline SVG)
-FS_GIFT = ("<svg viewBox='0 0 44 44' width='30' height='30' fill='none' stroke='#14315f' "
-           "stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'>"
-           "<path d='M22 13C19.5 6 13 5 11 8.2c-1.7 2.8 1.4 4.8 5 4.8'/>"
-           "<path d='M22 13c2.5-7 9-8 11-4.8 1.7 2.8-1.4 4.8-5 4.8'/>"
-           "<rect x='6' y='13' width='32' height='7.5' rx='1'/>"
-           "<rect x='8.5' y='20.5' width='27' height='17' rx='1'/>"
-           "<path d='M22 13v24.5'/></svg>")
-FS_LOGO = (f"<span class='fs-gift'>{FS_GIFT}</span>"
-           f"<span class='fs-word'>FREESTAND</span>")
 
 
 def safe_name(n):
@@ -457,32 +446,31 @@ def build():
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Fussy Cat — UGC Review</title>
 <style>
-:root{{--purple:#5e2a84;--purple-soft:#f3edf8;--ink:#241626;--body:#3d3444;--mut:#8a8291;
---line:#ece8f1;--bg:#faf8fb;--card:#fff;
---ok:#2f6a45;--okbg:#e9f3ec;--bad:#a83430;--badbg:#f7e9e7;--warn:#8a6a1e;--warnbg:#f6efdd;
---serif:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,'Times New Roman',serif;
---sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}}
+:root{{--purple:#2050d8;--purple-soft:#eef3ff;--ink:#111827;--body:#374151;--mut:#6b7280;
+--line:#e5e7eb;--bg:#fff;--card:#fff;
+--ok:#15803d;--okbg:#ecfdf3;--bad:#b91c1c;--badbg:#fef2f2;--warn:#92400e;--warnbg:#fffbeb;
+--serif:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+--sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}}
 *{{box-sizing:border-box}}
 body{{margin:0;font-family:var(--sans);color:var(--body);background:var(--bg);-webkit-font-smoothing:antialiased}}
-.app{{display:flex;align-items:flex-start;max-width:1360px;margin:0 auto}}
-.side{{width:260px;flex:none;position:sticky;top:0;height:100vh;padding:34px 26px;border-right:1px solid var(--line);background:#fff}}
-.logo{{display:flex;align-items:center;gap:9px;margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--line)}}
-.fs-gift{{display:flex;flex:none}}
-.fs-word{{font-weight:800;letter-spacing:.015em;font-size:21px;color:#14315f}}
-.brand{{font-weight:800;letter-spacing:.22em;font-size:13px;color:var(--purple)}}
-.prod{{font-family:var(--serif);font-size:24px;line-height:1.15;color:var(--ink);margin:6px 0 26px}}
-.nav{{display:flex;width:100%;align-items:center;gap:10px;border:0;background:none;cursor:pointer;text-align:left;padding:11px 10px;border-radius:9px;color:var(--body);margin-bottom:2px}}
-.nav:hover{{background:var(--bg)}} .nav.on{{background:var(--purple-soft);color:var(--purple)}}
-.nav .n{{font-variant-numeric:tabular-nums;font-size:12px;color:var(--mut);width:20px}}
-.nav.on .n{{color:var(--purple)}} .nav .t{{flex:1;font-size:14px;font-weight:600}}
-.nav .c{{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}}
-.side .foot{{margin-top:26px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--mut);line-height:1.6}}
-main{{flex:1;min-width:0;padding:44px 48px 80px}}
-.panel{{display:none;max-width:1100px}} .panel.on{{display:block}}
-.eye{{text-transform:uppercase;letter-spacing:.16em;font-size:12px;font-weight:700;color:var(--purple)}}
-.disp{{font-family:var(--serif);font-weight:600;font-size:38px;line-height:1.1;color:var(--ink);margin:10px 0 12px}}
-.lead{{font-size:17px;line-height:1.6;color:var(--mut);max-width:680px;margin:0 0 22px}}
-hr{{border:0;border-top:1px solid var(--line);margin:0 0 24px}}
+.app{{max-width:1480px;margin:0 auto}}
+.top{{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);padding:0 26px}}
+.trow{{display:flex;align-items:baseline;gap:14px;padding:15px 2px 9px}}
+.ttl{{font-size:16px;font-weight:700;color:var(--ink)}}
+.tsum{{font-size:12.5px;color:var(--mut)}}
+.tabs{{display:flex;gap:2px;overflow-x:auto}}
+.nav{{display:flex;align-items:center;gap:8px;border:0;background:none;cursor:pointer;padding:10px 13px;font-size:13.5px;font-weight:600;color:var(--mut);border-bottom:2px solid transparent;white-space:nowrap;font-family:var(--sans)}}
+.nav:hover{{color:var(--ink)}} .nav.on{{color:var(--purple);border-bottom-color:var(--purple)}}
+.nav .n{{display:none}}
+.nav .t{{font-size:inherit;font-weight:inherit}}
+.nav .c{{font-size:11.5px;background:#f3f4f6;color:var(--mut);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}}
+.nav.on .c{{background:var(--purple-soft);color:var(--purple)}}
+main{{padding:22px 26px 60px}}
+.panel{{display:none}} .panel.on{{display:block}}
+.eye{{display:none}}
+.disp{{font-family:var(--sans);font-weight:700;font-size:20px;line-height:1.2;color:var(--ink);margin:2px 0 6px}}
+.lead{{font-size:13.5px;line-height:1.55;color:var(--mut);max-width:720px;margin:0 0 16px}}
+hr{{border:0;border-top:1px solid var(--line);margin:0 0 18px}}
 .toolbar{{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:22px}}
 .search{{flex:1;min-width:220px;padding:11px 15px;border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:var(--sans);background:#fff}}
 .search:focus{{outline:none;border-color:var(--purple)}}
@@ -534,18 +522,14 @@ figcaption svg{{opacity:.8}}
 .lb img{{max-width:96vw;max-height:92vh;border-radius:10px;object-fit:contain}}
 .lbx{{position:fixed;top:18px;right:22px;width:42px;height:42px;border:0;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:24px;cursor:pointer}}
 @media(max-width:820px){{
-.app{{display:block}} .side{{width:auto;height:auto;position:static;border-right:0;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:18px}}
-.prod{{margin:0 18px 0 0}} .nav{{width:auto;margin:0}} .side .foot{{display:none}}
-main{{padding:26px 18px 60px}} .disp{{font-size:30px}}}}
+.top{{padding:0 14px}} .tsum{{display:none}}
+main{{padding:16px 14px 50px}}}}
 </style></head><body>
 <div class=app>
-<aside class=side>
-<div class=logo>{FS_LOGO}</div>
-<div class=brand>WHISKAS</div>
-<div class=prod>Fussy&nbsp;Cat<br>UGC Review</div>
-<nav>{nav}</nav>
-<div class=foot>{esc(summary)}</div>
-</aside>
+<header class=top>
+<div class=trow><span class=ttl>Fussy Cat — UGC Review</span><span class=tsum>{esc(summary)}</span></div>
+<nav class=tabs>{nav}</nav>
+</header>
 <main>{''.join(panels)}</main>
 </div>
 <div id=lb class=lb hidden><img alt=""><button class=lbx>×</button></div>
