@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v14 (2025-08-24) — Fatima/Vineeth has-cat, no row numbers, Freestand navy buttons"
+VERSION = "v15 (2025-08-25) — removed header title row (embed has its own heading)"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -461,10 +461,7 @@ def build():
 body{{margin:0;font-family:var(--sans);color:var(--body);background:var(--bg);-webkit-font-smoothing:antialiased}}
 .app{{max-width:1480px;margin:0 auto}}
 .top{{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);padding:0 26px}}
-.trow{{display:flex;align-items:baseline;gap:14px;padding:15px 2px 9px}}
-.ttl{{font-size:16px;font-weight:700;color:var(--ink)}}
-.tsum{{font-size:12.5px;color:var(--mut)}}
-.tabs{{display:flex;gap:2px;overflow-x:auto}}
+.tabs{{display:flex;gap:2px;overflow-x:auto;padding-top:4px}}
 .nav{{display:flex;align-items:center;gap:8px;border:0;background:none;cursor:pointer;padding:10px 13px;font-size:13.5px;font-weight:600;color:var(--mut);border-bottom:2px solid transparent;white-space:nowrap;font-family:var(--sans)}}
 .nav:hover{{color:var(--ink)}} .nav.on{{color:var(--purple);border-bottom-color:var(--purple)}}
 .nav .n{{display:none}}
@@ -528,12 +525,11 @@ figcaption svg{{opacity:.8}}
 .lb img{{max-width:96vw;max-height:92vh;border-radius:10px;object-fit:contain}}
 .lbx{{position:fixed;top:18px;right:22px;width:42px;height:42px;border:0;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:24px;cursor:pointer}}
 @media(max-width:820px){{
-.top{{padding:0 14px}} .tsum{{display:none}}
+.top{{padding:0 14px}}
 main{{padding:16px 14px 50px}}}}
 </style></head><body>
 <div class=app>
 <header class=top>
-<div class=trow><span class=ttl>Fussy Cat — UGC Review</span><span class=tsum>{esc(summary)}</span></div>
 <nav class=tabs>{nav}</nav>
 </header>
 <main>{''.join(panels)}</main>
