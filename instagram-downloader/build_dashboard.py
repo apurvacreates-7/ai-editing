@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v13 (2025-08-24) — embed-ready: Freestand-native look, top tabs, no logos"
+VERSION = "v14 (2025-08-24) — Fatima/Vineeth has-cat, no row numbers, Freestand navy buttons"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -41,6 +41,9 @@ CONFIRMED_CATS = {n.lower() for n in [
     "Ajoy shil", "Alisha mansoor", "Anosh m", "Daler singh", "Doli das",
     "Sarathy", "Senti", "RIKUL SARMA", "Hayat", "Twinkle Dutta", "Ali Ahmad",
 ]}
+
+# Instagram-link rows a human confirmed DO show a cat (overrides the detector).
+T1_CONFIRMED_CATS = {266, 989}  # Fatima, Vineeth
 
 # Names a human reviewed and wants disqualified regardless of the automation.
 FORCE_DISQUALIFY = {n.lower() for n in [
@@ -263,7 +266,8 @@ def build():
 
     # counts for filter chips
     def t1_has_cat(d):
-        return cat_yes(d["ig_cat"]) or cat_yes(d["chat_cat"])
+        return (d["row"] in T1_CONFIRMED_CATS
+                or cat_yes(d["ig_cat"]) or cat_yes(d["chat_cat"]))
     s1 = Counter(t1_status(d["verdict"]) for d in t1)         # kept for the console summary
     s1c = Counter("yes" if t1_has_cat(d) else "no" for d in t1)
     s2 = Counter("yes" if d["klass"] == "cat" else "no" for d in t2)
@@ -300,7 +304,7 @@ def build():
 
     def head(name, row):
         return (f"<div class='chead'><span class='avatar'>{IC_PERSON}</span>"
-                f"<span class='nm'>{esc(name)}</span><span class='rw'>row {row}</span></div>")
+                f"<span class='nm'>{esc(name)}</span></div>")
 
     vmap = {"SAME": ("Match", "ok"), "LIKELY SAME": ("Likely match", "ok"),
             "UNCERTAIN": ("Unclear", "warn"), "DIFFERENT": ("Different", "bad"),
@@ -310,6 +314,8 @@ def build():
     c1 = []
     for d in t1:
         cat_ig = cat_yes(d["ig_cat"]); cat_chat = cat_yes(d["chat_cat"])
+        if d["row"] in T1_CONFIRMED_CATS:
+            cat_ig = cat_chat = True
         is_ai = bool(d["ai"] or d["ai_mark"])
         vlabel, vcls = vmap.get(d["verdict"], (d["verdict"], "mut"))
         vicon = IC_CHECK if vcls == "ok" else (IC_X if vcls == "bad" else "")
@@ -446,7 +452,7 @@ def build():
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Fussy Cat — UGC Review</title>
 <style>
-:root{{--purple:#2050d8;--purple-soft:#eef3ff;--ink:#111827;--body:#374151;--mut:#6b7280;
+:root{{--purple:#16265b;--purple-soft:#edf1f8;--ink:#111827;--body:#374151;--mut:#6b7280;
 --line:#e5e7eb;--bg:#fff;--card:#fff;
 --ok:#15803d;--okbg:#ecfdf3;--bad:#b91c1c;--badbg:#fef2f2;--warn:#92400e;--warnbg:#fffbeb;
 --serif:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
@@ -475,14 +481,14 @@ hr{{border:0;border-top:1px solid var(--line);margin:0 0 18px}}
 .search{{flex:1;min-width:220px;padding:11px 15px;border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:var(--sans);background:#fff}}
 .search:focus{{outline:none;border-color:var(--purple)}}
 .chips{{display:flex;gap:7px;flex-wrap:wrap}}
-.chip{{border:1px solid var(--line);background:#fff;padding:8px 13px;border-radius:999px;cursor:pointer;font-size:13px;color:var(--body);font-family:var(--sans);font-variant-numeric:tabular-nums}}
+.chip{{border:1px solid var(--purple);background:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--purple);font-family:var(--sans);font-variant-numeric:tabular-nums}}
+.chip:hover{{background:var(--purple-soft)}}
 .chip.on{{background:var(--purple);color:#fff;border-color:var(--purple)}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px}}
 .card{{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column}}
 .chead{{display:flex;align-items:center;gap:10px;margin-bottom:12px}}
 .avatar{{width:34px;height:34px;border-radius:50%;background:var(--purple-soft);color:var(--purple);display:flex;align-items:center;justify-content:center;flex:none}}
 .nm{{font-size:16px;font-weight:700;color:var(--ink);flex:1}}
-.rw{{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}}
 .pair{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
 .ph{{margin:0}}
 .frame{{position:relative;border-radius:12px;overflow:hidden;background:#f1eef4;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}}
@@ -498,8 +504,8 @@ figcaption svg{{opacity:.8}}
 .b.ok{{background:var(--okbg);color:var(--ok)}} .b.bad{{background:var(--badbg);color:var(--bad)}}
 .b.warn{{background:var(--warnbg);color:var(--warn)}} .b.mut{{background:#efedf2;color:var(--mut)}}
 .meta{{color:var(--mut);font-size:13px;margin-top:9px}}
-.visit{{display:inline-flex;align-items:center;gap:7px;margin-top:11px;padding:9px 13px;border:1px solid var(--line);border-radius:10px;color:var(--purple);font-size:13px;font-weight:600;text-decoration:none;width:fit-content}}
-.visit:hover{{background:var(--purple-soft);border-color:var(--purple-soft)}}
+.visit{{display:inline-flex;align-items:center;gap:7px;margin-top:11px;padding:9px 14px;border:1px solid var(--purple);border-radius:8px;color:var(--purple);font-size:13px;font-weight:600;text-decoration:none;width:fit-content}}
+.visit:hover{{background:var(--purple-soft)}}
 .capwrap{{margin-top:11px}}
 .cap{{font-family:var(--serif);font-style:italic;font-size:14.5px;line-height:1.5;color:var(--body);white-space:pre-wrap}}
 .cap.clamp{{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}}
