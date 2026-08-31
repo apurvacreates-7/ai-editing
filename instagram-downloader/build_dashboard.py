@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v16 (2025-08-31) — batch labels (Batch 1: 24 Aug, Batch 2: 31 Aug) on every card"
+VERSION = "v17 (2025-08-31) — batch dropdown filter on every tab"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -50,6 +50,9 @@ BATCH2_LABEL = "Batch 2 · 31 Aug 2025"
 
 def batch_label(i):
     return BATCH1_LABEL if i <= BATCH_CUTOFF else BATCH2_LABEL
+
+def batch_num(i):
+    return "1" if i <= BATCH_CUTOFF else "2"
 
 # Instagram-link rows a human confirmed DO show a cat (overrides the detector).
 T1_CONFIRMED_CATS = {266, 989}  # Fatima, Vineeth
@@ -373,7 +376,7 @@ def build():
                  + (f"<div class='meta'>{' &nbsp;·&nbsp; '.join(meta)}</div>" if meta else "")
                  + visit(d["link"]) + caption_block(d["caption"]) + act)
         cat_flag = "yes" if (cat_ig or cat_chat) else "no"
-        c1.append(f"<article class='card' data-s='{t1_status(d['verdict'])}' data-cat='{cat_flag}' data-name='{esc(d['name'].lower())}'>{inner}</article>")
+        c1.append(f"<article class='card' data-s='{t1_status(d['verdict'])}' data-cat='{cat_flag}' data-b='{batch_num(d['row'])}' data-name='{esc(d['name'].lower())}'>{inner}</article>")
 
     # ---- Tab 2 ----
     c2 = []
@@ -389,7 +392,7 @@ def build():
         inner = (head(d["name"], d["row"])
                  + figure(d["img"], d["mtype"], "chat", d["mtype"] == "video")
                  + f"<div class='badges'>{cb}</div>" + act)
-        c2.append(f"<article class='card' data-cat='{flag}' data-name='{esc(d['name'].lower())}'>{inner}</article>")
+        c2.append(f"<article class='card' data-cat='{flag}' data-b='{batch_num(d['row'])}' data-name='{esc(d['name'].lower())}'>{inner}</article>")
 
     # ---- Tab 3 ----
     c3 = []
@@ -399,7 +402,7 @@ def build():
                  + f"<div class='badges'>{badge(d['reason'], 'bad', IC_X)}</div>"
                  f"<div class='meta'>{esc(d['detail'])}</div>"
                  + action("red", "Disqualify", "Not a real cat photo — ask them to re-upload"))
-        c3.append(f"<article class='card' data-name='{esc(d['name'].lower())}'>{inner}</article>")
+        c3.append(f"<article class='card' data-b='{batch_num(d['row'])}' data-name='{esc(d['name'].lower())}'>{inner}</article>")
 
     # ---- Tab 4 ----
     c4 = []
@@ -410,7 +413,7 @@ def build():
                  + visit(d["link"], "Open the link they sent")
                  + f"<div class='meta'>{esc(d['ltype'])}</div>"
                  + action("purple", "Request link", "Ask for the actual Instagram post link"))
-        c4.append(f"<article class='card' data-name='{esc(d['name'].lower())}'>{inner}</article>")
+        c4.append(f"<article class='card' data-b='{batch_num(d['row'])}' data-name='{esc(d['name'].lower())}'>{inner}</article>")
 
     tabs = [
         ("Instagram submissions", len(t1),
@@ -439,13 +442,15 @@ def build():
         f"<span class='c'>{cnt}</span></button>"
         for idx, (title, cnt, _d, _c, _ch) in enumerate(tabs))
 
+    bsel = (f"<select class='bsel'><option value='all'>All batches</option>"
+            f"<option value='1'>{esc(BATCH1_LABEL)}</option>"
+            f"<option value='2'>{esc(BATCH2_LABEL)}</option></select>")
     panels = []
     for idx, (title, cnt, desc, cards, chips) in enumerate(tabs):
         chip_bar = f"<div class='chips'>{chips}</div>" if chips else ""
         # Tab 2 (No Instagram link) is browsed by chip only — no search box
         search_box = "" if idx == 1 else "<input class='search' placeholder='Search a name…'>"
-        toolbar = (f"<div class='toolbar'>{search_box}{chip_bar}</div>"
-                   if (search_box or chip_bar) else "")
+        toolbar = f"<div class='toolbar'>{search_box}{bsel}{chip_bar}</div>"
         panels.append(
             f"<section class='panel{' on' if idx==0 else ''}' data-p='{idx}'>"
             f"<div class='eye'>Section {idx+1:02d}</div>"
@@ -488,6 +493,8 @@ hr{{border:0;border-top:1px solid var(--line);margin:0 0 18px}}
 .search{{flex:1;min-width:220px;padding:11px 15px;border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:var(--sans);background:#fff}}
 .search:focus{{outline:none;border-color:var(--purple)}}
 .chips{{display:flex;gap:7px;flex-wrap:wrap}}
+.bsel{{border:1px solid var(--purple);background:#fff;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--purple);font-family:var(--sans)}}
+.bsel:focus{{outline:none}}
 .chip{{border:1px solid var(--purple);background:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--purple);font-family:var(--sans);font-variant-numeric:tabular-nums}}
 .chip:hover{{background:var(--purple-soft)}}
 .chip.on{{background:var(--purple);color:#fff;border-color:var(--purple)}}
@@ -552,12 +559,15 @@ navs.forEach(n=>n.onclick=()=>{{navs.forEach(x=>x.classList.remove('on'));
 panels.forEach(x=>x.classList.remove('on'));n.classList.add('on');
 panels[+n.dataset.t].classList.add('on');window.scrollTo(0,0);}});
 function apply(p){{const si=p.querySelector('.search');const q=si?(si.value||'').toLowerCase().trim():'';
-const chip=p.querySelector('.chip.on');const f=chip?chip.dataset.f:'all';let vis=0;
+const chip=p.querySelector('.chip.on');const f=chip?chip.dataset.f:'all';
+const bs=p.querySelector('.bsel');const bv=bs?bs.value:'all';let vis=0;
 p.querySelectorAll('.card').forEach(c=>{{const okN=!q||(c.dataset.name||'').includes(q);
 let okF=true;if(f&&f!=='all')okF=(c.dataset.s===f)||(c.dataset.cat===f);
-const s=okN&&okF;c.style.display=s?'':'none';if(s)vis++;}});
+const okB=(bv==='all')||(c.dataset.b===bv);
+const s=okN&&okF&&okB;c.style.display=s?'':'none';if(s)vis++;}});
 p.querySelector('.noresults').hidden=vis>0;}}
 panels.forEach(p=>{{const si=p.querySelector('.search');if(si)si.addEventListener('input',()=>apply(p));
+const bs=p.querySelector('.bsel');if(bs)bs.onchange=()=>apply(p);
 p.querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>{{
 p.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));ch.classList.add('on');apply(p);}});}});
 // read-more (guard no-caption cards; measure full vs clamped height)
