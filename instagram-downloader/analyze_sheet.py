@@ -26,7 +26,14 @@ Setup (one time):
         pillow numpy opencv-python-headless requests ultralytics open_clip_torch gallery-dl
 """
 
-import csv, glob, html, json, os, re, subprocess, sys, urllib.request
+import os
+# Guard against the macOS OpenMP double-load segfault: torch and OpenCV/ONNX
+# each bundle a copy of libomp, and loading both intermittently crashes with
+# "segmentation fault". These MUST be set before importing torch/cv2/onnx.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
+import csv, glob, html, json, re, subprocess, sys, urllib.request
 from collections import Counter
 import numpy as np
 from PIL import Image, ImageDraw

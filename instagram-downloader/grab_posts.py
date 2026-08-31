@@ -61,10 +61,13 @@ def find_roster():
 
 def download(url, dest_dir):
     os.makedirs(dest_dir, exist_ok=True)
-    cmd = ["gallery-dl", "--write-metadata", "-D", dest_dir]
+    # invoke gallery-dl as a module (same as analyze_sheet.py) — the bare
+    # `gallery-dl` binary is often not on PATH even when the package is installed.
+    cmd = [sys.executable, "-m", "gallery_dl", "-D", dest_dir,
+           "--write-metadata", "--sleep-request", "3.0-6.0", "--retries", "2"]
     if os.path.exists(COOKIES):
         cmd += ["--cookies", COOKIES]
-    cmd += ["--sleep", "3-6", "--sleep-request", "3", url]
+    cmd.append(url)
     return subprocess.run(cmd, capture_output=True, text=True, timeout=180)
 
 
@@ -138,7 +141,9 @@ def main():
         open(CKPT, "w", encoding="utf-8").write("\n".join(keep) + ("\n" if keep else ""))
         print(f"\nCleared {len(grabbed)} row(s) from the checkpoint (backup: {bak}).")
 
-    print("\nNext:")
+    print("\nNext — to SHOW the images now (verified rows already read as Qualified):")
+    print(f'  python3 build_dashboard.py "{roster}"')
+    print("\nOptional — to also compute real similarity / likes / caption:")
     print(f'  python3 analyze_sheet.py "{roster}"')
     print("  python3 rethreshold.py")
     print(f'  python3 build_dashboard.py "{roster}"')
