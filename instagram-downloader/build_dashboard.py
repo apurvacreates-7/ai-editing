@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v15 (2025-08-25) — removed header title row (embed has its own heading)"
+VERSION = "v16 (2025-08-31) — batch labels (Batch 1: 24 Aug, Batch 2: 31 Aug) on every card"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -41,6 +41,15 @@ CONFIRMED_CATS = {n.lower() for n in [
     "Ajoy shil", "Alisha mansoor", "Anosh m", "Daler singh", "Doli das",
     "Sarathy", "Senti", "RIKUL SARMA", "Hayat", "Twinkle Dutta", "Ali Ahmad",
 ]}
+
+# Analysis batches — rows up to the cutoff were analysed in the first pass.
+# (Edit the dates here if needed.)
+BATCH_CUTOFF = 2399
+BATCH1_LABEL = "Batch 1 · 24 Aug 2025"
+BATCH2_LABEL = "Batch 2 · 31 Aug 2025"
+
+def batch_label(i):
+    return BATCH1_LABEL if i <= BATCH_CUTOFF else BATCH2_LABEL
 
 # Instagram-link rows a human confirmed DO show a cat (overrides the detector).
 T1_CONFIRMED_CATS = {266, 989}  # Fatima, Vineeth
@@ -304,7 +313,8 @@ def build():
 
     def head(name, row):
         return (f"<div class='chead'><span class='avatar'>{IC_PERSON}</span>"
-                f"<span class='nm'>{esc(name)}</span></div>")
+                f"<span class='nm'>{esc(name)}</span>"
+                f"<span class='rw'>{esc(batch_label(row))}</span></div>")
 
     vmap = {"SAME": ("Match", "ok"), "LIKELY SAME": ("Likely match", "ok"),
             "UNCERTAIN": ("Unclear", "warn"), "DIFFERENT": ("Different", "bad"),
@@ -486,6 +496,7 @@ hr{{border:0;border-top:1px solid var(--line);margin:0 0 18px}}
 .chead{{display:flex;align-items:center;gap:10px;margin-bottom:12px}}
 .avatar{{width:34px;height:34px;border-radius:50%;background:var(--purple-soft);color:var(--purple);display:flex;align-items:center;justify-content:center;flex:none}}
 .nm{{font-size:16px;font-weight:700;color:var(--ink);flex:1}}
+.rw{{font-size:11px;color:var(--mut);white-space:nowrap}}
 .pair{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
 .ph{{margin:0}}
 .frame{{position:relative;border-radius:12px;overflow:hidden;background:#f1eef4;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}}

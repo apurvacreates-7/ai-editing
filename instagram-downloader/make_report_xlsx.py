@@ -157,6 +157,15 @@ t1.sort(key=simval, reverse=True)
 t2.sort(key=lambda d: (0 if d["k"] == "cat" else 1, -d["conf"]))
 print(f"t1 {len(t1)} | t2 {len(t2)} | t3 {len(t3)} | t4 {len(t4)}")
 
+# ---------- analysis batch (rows up to the cutoff = first pass) ----------
+BATCH_CUTOFF = 2399
+def batch_label(i):
+    return "Batch 1 (24 Aug 2025)" if i <= BATCH_CUTOFF else "Batch 2 (31 Aug 2025)"
+for d in t1: d["row"].insert(2, batch_label(d["row"][0]))
+for d in t2: d["row"].insert(2, batch_label(d["row"][0]))
+for row in t3: row.insert(2, batch_label(row[0]))
+for row in t4: row.insert(2, batch_label(row[0]))
+
 # ---------- workbook ----------
 wb = Workbook()
 NAVY = "16265B"
@@ -181,23 +190,26 @@ def sheet(ws, headers, data, widths):
 
 ws1 = wb.active; ws1.title = "1 Instagram submissions"
 sheet(ws1,
-      ["Row", "Name", "Verdict", "Similarity", "Has cat", "Cat in chat", "Cat in post",
-       "IG username", "Likes", "Comments", "Views", "Caption", "Instagram link",
-       "Chat media link", "Note"],
+      ["Row", "Name", "Analysis batch", "Verdict", "Similarity", "Has cat", "Cat in chat",
+       "Cat in post", "IG username", "Likes", "Comments", "Views", "Caption",
+       "Instagram link", "Chat media link", "Note"],
       [d["row"] for d in t1],
-      [6, 22, 14, 10, 9, 10, 10, 22, 8, 10, 8, 45, 45, 45, 45])
+      [6, 22, 20, 14, 10, 9, 10, 10, 22, 8, 10, 8, 45, 45, 45, 45])
 
 ws2 = wb.create_sheet("2 No Instagram link")
-sheet(ws2, ["Row", "Name", "Media type", "Has cat", "Detector detail", "Chat media link"],
-      [d["row"] for d in t2], [6, 22, 11, 9, 26, 60])
+sheet(ws2, ["Row", "Name", "Analysis batch", "Media type", "Has cat", "Detector detail",
+            "Chat media link"],
+      [d["row"] for d in t2], [6, 22, 20, 11, 9, 26, 60])
 
 ws3 = wb.create_sheet("3 Disqualified")
-sheet(ws3, ["Row", "Name", "Category", "Reason", "Media type", "Chat media link"],
-      t3, [6, 22, 20, 45, 11, 60])
+sheet(ws3, ["Row", "Name", "Analysis batch", "Category", "Reason", "Media type",
+            "Chat media link"],
+      t3, [6, 22, 20, 20, 45, 11, 60])
 
 ws4 = wb.create_sheet("4 Invalid links")
-sheet(ws4, ["Row", "Name", "Link submitted", "Why it's invalid", "Has chat media", "Media type"],
-      t4, [6, 22, 50, 55, 14, 11])
+sheet(ws4, ["Row", "Name", "Analysis batch", "Link submitted", "Why it's invalid",
+            "Has chat media", "Media type"],
+      t4, [6, 22, 20, 50, 55, 14, 11])
 
 # ---------- summary ----------
 wsS = wb.create_sheet("Summary", 0)
@@ -215,9 +227,9 @@ for j, (lab, ref) in enumerate(labels, start=3):
     c = wsS.cell(row=j, column=2, value=f"=COUNTA({ref}!A:A)-1")
     c.font = bold
 wsS["A8"] = "Instagram tab — has cat"; wsS["A8"].font = base
-wsS["B8"] = "=COUNTIF('1 Instagram submissions'!E:E,\"Yes\")"; wsS["B8"].font = bold
+wsS["B8"] = "=COUNTIF('1 Instagram submissions'!F:F,\"Yes\")"; wsS["B8"].font = bold
 wsS["A9"] = "Instagram tab — does not have cat"; wsS["A9"].font = base
-wsS["B9"] = "=COUNTIF('1 Instagram submissions'!E:E,\"No\")"; wsS["B9"].font = bold
+wsS["B9"] = "=COUNTIF('1 Instagram submissions'!F:F,\"No\")"; wsS["B9"].font = bold
 wsS["A11"] = ("Note: 'Has cat' on the Instagram tab includes two human-confirmed rows (266, 989). "
               "A pending/not-fetched Instagram link is listed on tab 1 AND tab 4, matching the dashboard.")
 wsS["A11"].font = Font(name="Arial", size=9, italic=True, color="666666")
