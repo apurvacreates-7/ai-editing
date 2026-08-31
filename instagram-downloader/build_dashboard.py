@@ -18,10 +18,17 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v21 (2025-08-31) — manual_ig/ fallback images for unfetchable posts"
+VERSION = "v22 (2025-08-31) — lighter image encoding to keep the file under 25 MB"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
+
+# Image encoding — smaller = lighter file (GitHub web upload caps at 25 MB).
+# Override without editing:  DASH_MAXDIM=440 DASH_Q=58 python3 build_dashboard.py ...
+PAIR_MAXDIM = int(os.environ.get("DASH_MAXDIM", "480"))   # chat + Instagram thumbnails
+PAIR_Q      = int(os.environ.get("DASH_Q", "62"))
+SINGLE_MAXDIM = PAIR_MAXDIM - 40                            # single-image cards (tabs 2-4)
+SINGLE_Q      = PAIR_Q - 2
 
 AI_FINDINGS = {
     1443: ("AI-generated video", "AI-generated (Veo/Gemini watermark)"),
@@ -162,7 +169,7 @@ def embed_video_frame(path, maxdim=560, q=72):
         pass
     return None
 
-def embed_any(path, maxdim=560, q=72):
+def embed_any(path, maxdim=PAIR_MAXDIM, q=PAIR_Q):
     if not path or not os.path.exists(path):
         return None
     ext = os.path.splitext(path)[1].lower()
@@ -247,7 +254,7 @@ def build():
         if force_disq and (has_media or is_ig(link)):
             fimg = (embed_any(first_in(os.path.join("s3_media", label + ".*")))
                     or embed_any(first_in(os.path.join("thumbs", label + ".*"))
-                                 or first_in(os.path.join("uploads_media", label + ".*")), 520, 70))
+                                 or first_in(os.path.join("uploads_media", label + ".*")), SINGLE_MAXDIM, SINGLE_Q))
             fd_r, fd_d = FD_REASON.get(name.strip().lower(),
                                        ("Disqualified", "Reviewed — not a valid entry"))
             t3.append({"name": name, "row": i, "img": fimg,
@@ -289,7 +296,7 @@ def build():
         real_link = bool(link) and not link.lower().startswith("choice-")
         confirmed = name.strip().lower() in CONFIRMED_CATS
         img = embed_any(first_in(os.path.join("thumbs", label + ".*"))
-                        or first_in(os.path.join("uploads_media", label + ".*")), 520, 70)
+                        or first_in(os.path.join("uploads_media", label + ".*")), SINGLE_MAXDIM, SINGLE_Q)
         mtype = "video" if video else "photo"
 
         if has_media and confirmed:
@@ -637,6 +644,9 @@ document.addEventListener('keydown',e=>{{if(e.key==='Escape')lb.hidden=true;}});
         f.write(doc)
     mb = os.path.getsize(out) / 1e6
     print(f"\nWrote {out}  ({mb:.1f} MB)")
+    if mb > 24:
+        print(f"  ⚠ over GitHub's 25 MB web-upload limit — re-run smaller, e.g.:")
+        print(f'    DASH_MAXDIM=420 DASH_Q=56 python3 build_dashboard.py "{roster}"')
     print(f"  01 Instagram submissions: {len(t1)}  (match {s1['match']} · different {s1['different']} · unclear {s1['unclear']} · pending {s1['pending']})")
     print(f"  02 No Instagram link:     {len(t2)}  (has cat {s2['yes']} · no cat {s2['no']})")
     print(f"  03 Disqualified:          {len(t3)}")
