@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v17 (2025-08-31) — batch dropdown filter on every tab"
+VERSION = "v18 (2025-08-31) — Niraj no-cat-in-post override"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -56,6 +56,9 @@ def batch_num(i):
 
 # Instagram-link rows a human confirmed DO show a cat (overrides the detector).
 T1_CONFIRMED_CATS = {266, 989}  # Fatima, Vineeth
+
+# Instagram-link rows a human confirmed do NOT show a cat in the IG post.
+T1_NO_CAT_POST = {n.lower() for n in ["Niraj Kumar"]}
 
 # Names a human reviewed and wants disqualified regardless of the automation.
 FORCE_DISQUALIFY = {n.lower() for n in [
@@ -329,6 +332,8 @@ def build():
         cat_ig = cat_yes(d["ig_cat"]); cat_chat = cat_yes(d["chat_cat"])
         if d["row"] in T1_CONFIRMED_CATS:
             cat_ig = cat_chat = True
+        if d["name"].strip().lower() in T1_NO_CAT_POST:
+            cat_ig = False
         is_ai = bool(d["ai"] or d["ai_mark"])
         vlabel, vcls = vmap.get(d["verdict"], (d["verdict"], "mut"))
         vicon = IC_CHECK if vcls == "ok" else (IC_X if vcls == "bad" else "")

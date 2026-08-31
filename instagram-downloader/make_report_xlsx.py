@@ -49,6 +49,7 @@ CONFIRMED_CATS = {n.lower() for n in [
     "Sarathy", "Senti", "RIKUL SARMA", "Hayat", "Twinkle Dutta", "Ali Ahmad",
 ]}
 T1_CONFIRMED_CATS = {266, 989}
+T1_NO_CAT_POST = {n.lower() for n in ["Niraj Kumar"]}
 FORCE_DISQUALIFY = {n.lower() for n in [
     "Sara Huma", "Biswarup", "Suraj kumar", "Abhijit Dasgupta", "Ahsan masood",
     "Akmal Bari", "Vishal Kumar Das", "Neha", "Sarika goes", "Sk Lasammad",
@@ -114,6 +115,8 @@ for i, r in enumerate(rows, start=1):
         cat_chat = cat_yes(a.get("chat_image_has_cat"))
         if i in T1_CONFIRMED_CATS:
             cat_ig = cat_chat = True
+        if name.lower() in T1_NO_CAT_POST:
+            cat_ig = False
         has_cat = "Yes" if (cat_ig or cat_chat) else "No"
         status = t1_status(verdict)
         note = ""
