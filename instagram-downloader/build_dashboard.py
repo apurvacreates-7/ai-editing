@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v18 (2025-08-31) — Niraj no-cat-in-post override"
+VERSION = "v19 (2025-08-31) — manually verified live posts (Rahul, Nazar, Janhabi, Salim, Sahal)"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -59,6 +59,12 @@ T1_CONFIRMED_CATS = {266, 989}  # Fatima, Vineeth
 
 # Instagram-link rows a human confirmed do NOT show a cat in the IG post.
 T1_NO_CAT_POST = {n.lower() for n in ["Niraj Kumar"]}
+
+# Not-fetched rows a human opened in the browser and verified: the post is
+# LIVE and shows a cat. Shown as Qualified until the automation can fetch them.
+T1_MANUAL_VERIFIED = {n.lower() for n in [
+    "Mr Rahul", "Nazar", "Janhabi Das", "Salim", "Shaikh sahal",
+]}
 
 # Names a human reviewed and wants disqualified regardless of the automation.
 FORCE_DISQUALIFY = {n.lower() for n in [
@@ -243,7 +249,9 @@ def build():
                 "caption": a.get("instagram_caption", ""), "note": a.get("note", ""),
                 "ai": ai, "ai_mark": a.get("instagram_ai_wordmark", "")})
             # a valid link that never downloaded is also an unusable link -> Invalid links
-            if t1_status(verdict) == "pending":
+            # (unless a human opened it and verified the post is live)
+            if (t1_status(verdict) == "pending"
+                    and name.strip().lower() not in T1_MANUAL_VERIFIED):
                 ltype, _why = pending_reason(link, a.get("note", ""))
                 t4.append({"name": name, "row": i, "link": link,
                            "ltype": _why, "img": chat_img})
@@ -282,6 +290,7 @@ def build():
     # counts for filter chips
     def t1_has_cat(d):
         return (d["row"] in T1_CONFIRMED_CATS
+                or d["name"].strip().lower() in T1_MANUAL_VERIFIED
                 or cat_yes(d["ig_cat"]) or cat_yes(d["chat_cat"]))
     s1 = Counter(t1_status(d["verdict"]) for d in t1)         # kept for the console summary
     s1c = Counter("yes" if t1_has_cat(d) else "no" for d in t1)
@@ -339,6 +348,12 @@ def build():
         vicon = IC_CHECK if vcls == "ok" else (IC_X if vcls == "bad" else "")
         # a valid IG link that never downloaded reads as PENDING or NO COMPARISON
         is_pending = t1_status(d["verdict"]) == "pending"
+        # human opened the link and verified the post is live and shows a cat
+        manual_ok = is_pending and d["name"].strip().lower() in T1_MANUAL_VERIFIED
+        if manual_ok:
+            is_pending = False
+            cat_ig = True
+            vlabel, vcls, vicon = "Live — verified", "ok", IC_CHECK
         sim = str(d["similarity"] or "")
         sim_txt = f" · {sim}" if (sim and sim != "-") else ""
         # only show cat badges when a cat is positively detected — the detector's
@@ -351,7 +366,9 @@ def build():
         if is_ai:
             badges.append(badge("AI content", "bad", IC_X))
         pend_meta = ""
-        if is_pending:
+        if manual_ok:
+            act = action("green", "Qualified", "Post is live and shows a cat — verified by review")
+        elif is_pending:
             label, why = pending_reason(d["link"], d.get("note", ""))
             act = action("grey", label, why)
         elif is_ai:

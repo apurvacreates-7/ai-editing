@@ -50,6 +50,9 @@ CONFIRMED_CATS = {n.lower() for n in [
 ]}
 T1_CONFIRMED_CATS = {266, 989}
 T1_NO_CAT_POST = {n.lower() for n in ["Niraj Kumar"]}
+T1_MANUAL_VERIFIED = {n.lower() for n in [
+    "Mr Rahul", "Nazar", "Janhabi Das", "Salim", "Shaikh sahal",
+]}
 FORCE_DISQUALIFY = {n.lower() for n in [
     "Sara Huma", "Biswarup", "Suraj kumar", "Abhijit Dasgupta", "Ahsan masood",
     "Akmal Bari", "Vishal Kumar Das", "Neha", "Sarika goes", "Sk Lasammad",
@@ -117,10 +120,15 @@ for i, r in enumerate(rows, start=1):
             cat_ig = cat_chat = True
         if name.lower() in T1_NO_CAT_POST:
             cat_ig = False
+        manual_ok = (verdict in ("PENDING", "NO COMPARISON")
+                     and name.lower() in T1_MANUAL_VERIFIED)
+        if manual_ok:
+            cat_ig = True
+            verdict = "LIVE — VERIFIED MANUALLY"
         has_cat = "Yes" if (cat_ig or cat_chat) else "No"
         status = t1_status(verdict)
-        note = ""
-        if status == "pending":
+        note = "Post is live and shows a cat — verified by review" if manual_ok else ""
+        if status == "pending" and not manual_ok:
             lbl, why = pending_reason(link, a.get("note", ""))
             note = why
             t4.append([i, name, link, why, "yes" if media_link else "no", mtype])
