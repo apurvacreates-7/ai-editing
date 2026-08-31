@@ -51,12 +51,16 @@ CONFIRMED_CATS = {n.lower() for n in [
 T1_CONFIRMED_CATS = {266, 989}
 T1_NO_CAT_POST = {n.lower() for n in ["Niraj Kumar"]}
 T1_MANUAL_VERIFIED = {n.lower() for n in [
-    "Mr Rahul", "Nazar", "Janhabi Das", "Salim", "Shaikh sahal",
+    "Mr Rahul", "Nazar", "Janhabi Das", "Salim", "Shaikh sahal", "Aleena",
 ]}
 FORCE_DISQUALIFY = {n.lower() for n in [
     "Sara Huma", "Biswarup", "Suraj kumar", "Abhijit Dasgupta", "Ahsan masood",
     "Akmal Bari", "Vishal Kumar Das", "Neha", "Sarika goes", "Sk Lasammad",
+    "Bibekananda Parida",
 ]}
+FD_REASON = {
+    "bibekananda parida": ("No cat", "No cat in the submission — reviewed"),
+}
 
 def is_ig(u): return bool(re.search(r"instagram\.com/(p|reel|reels|tv|stories)/", u or ""))
 def cat_yes(s): return (s or "").strip().upper().startswith("CAT")
@@ -108,7 +112,9 @@ for i, r in enumerate(rows, start=1):
     ai = AI_FINDINGS.get(i)
 
     if name.lower() in FORCE_DISQUALIFY and (has_media or is_ig(link)):
-        t3.append([i, name, "Disqualified", "Reviewed — not a valid entry", mtype, media_link])
+        fd_r, fd_d = FD_REASON.get(name.lower(),
+                                   ("Disqualified", "Reviewed — not a valid entry"))
+        t3.append([i, name, fd_r, fd_d, mtype, media_link])
         continue
 
     if is_ig(link):

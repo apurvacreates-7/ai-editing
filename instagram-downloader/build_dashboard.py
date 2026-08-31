@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v19 (2025-08-31) — manually verified live posts (Rahul, Nazar, Janhabi, Salim, Sahal)"
+VERSION = "v20 (2025-08-31) — Aleena verified live; Bibekananda Parida disqualified (no cat)"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -63,14 +63,19 @@ T1_NO_CAT_POST = {n.lower() for n in ["Niraj Kumar"]}
 # Not-fetched rows a human opened in the browser and verified: the post is
 # LIVE and shows a cat. Shown as Qualified until the automation can fetch them.
 T1_MANUAL_VERIFIED = {n.lower() for n in [
-    "Mr Rahul", "Nazar", "Janhabi Das", "Salim", "Shaikh sahal",
+    "Mr Rahul", "Nazar", "Janhabi Das", "Salim", "Shaikh sahal", "Aleena",
 ]}
 
 # Names a human reviewed and wants disqualified regardless of the automation.
 FORCE_DISQUALIFY = {n.lower() for n in [
     "Sara Huma", "Biswarup", "Suraj kumar", "Abhijit Dasgupta", "Ahsan masood",
     "Akmal Bari", "Vishal Kumar Das", "Neha", "Sarika goes", "Sk Lasammad",
+    "Bibekananda Parida",
 ]}
+# Specific disqualification reasons (default: "Reviewed — not a valid entry").
+FD_REASON = {
+    "bibekananda parida": ("No cat", "No cat in the submission — reviewed"),
+}
 
 # ---- inline icons (currentColor) ----
 IC_PERSON = "<svg viewBox='0 0 24 24' width='16' height='16' fill='none' stroke='currentColor' stroke-width='2'><circle cx='12' cy='8' r='3.2'/><path d='M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6'/></svg>"
@@ -226,9 +231,11 @@ def build():
             fimg = (embed_any(first_in(os.path.join("s3_media", label + ".*")))
                     or embed_any(first_in(os.path.join("thumbs", label + ".*"))
                                  or first_in(os.path.join("uploads_media", label + ".*")), 520, 70))
+            fd_r, fd_d = FD_REASON.get(name.strip().lower(),
+                                       ("Disqualified", "Reviewed — not a valid entry"))
             t3.append({"name": name, "row": i, "img": fimg,
                        "mtype": "video" if video else "photo",
-                       "reason": "Disqualified", "detail": "Reviewed — not a valid entry"})
+                       "reason": fd_r, "detail": fd_d})
             continue
 
         if is_ig(link):
