@@ -18,7 +18,7 @@ try:
 except Exception:
     cv2 = None
 
-VERSION = "v20 (2025-08-31) — Aleena verified live; Bibekananda Parida disqualified (no cat)"
+VERSION = "v21 (2025-08-31) — manual_ig/ fallback images for unfetchable posts"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
@@ -175,6 +175,23 @@ def first_in(pattern):
             if os.path.splitext(p)[1].lower() in (IMG_EXT | VID_EXT)]
     return hits[0] if hits else None
 
+# ---- manually-supplied cropped images (for posts the downloader can't fetch) ----
+# Drop a file into manual_ig/  named by the person (e.g. "Mr Rahul.jpg" or the row
+# number "2401.png"); it is used as the Instagram-post image on that card.
+def _norm(s):
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+_MANUAL_IG = None
+def manual_ig_image(name, row):
+    global _MANUAL_IG
+    if _MANUAL_IG is None:
+        _MANUAL_IG = {}
+        for p in glob.glob(os.path.join("manual_ig", "*")):
+            if os.path.splitext(p)[1].lower() in (IMG_EXT | VID_EXT):
+                _MANUAL_IG[_norm(os.path.splitext(os.path.basename(p))[0])] = p
+    p = _MANUAL_IG.get(_norm(name)) or _MANUAL_IG.get(str(row))
+    return embed_any(p) if p else None
+
 def esc(s):
     return html.escape(str(s if s is not None else ""))
 
@@ -242,10 +259,12 @@ def build():
             a = analysis.get(i, {})
             verdict = a.get("match_verdict", "") or "PENDING"
             chat_img = embed_any(first_in(os.path.join("s3_media", label + ".*")))
+            ig_img = (embed_any(first_in(os.path.join("downloads", label, "*")))
+                      or manual_ig_image(name, i))
             t1.append({
                 "name": name, "row": i, "link": link,
                 "chat_img": chat_img,
-                "ig_img": embed_any(first_in(os.path.join("downloads", label, "*"))),
+                "ig_img": ig_img,
                 "chat_vid": bool(video),
                 "verdict": verdict,
                 "similarity": a.get("similarity", ""),
