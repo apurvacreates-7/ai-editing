@@ -1,0 +1,26 @@
+{
+  "name": "celine-delhi-ad",
+  "version": "1.0.0",
+  "description": "15-20s 3D animated ad: Delhi pollution + Celine Vitamin C free sample",
+  "scripts": {
+    "start": "remotion studio",
+    "render": "remotion render CelineDelhiAd out/celine-delhi-ad.mp4 --gl=swangle --concurrency=2"
+  },
+  "remotion": {
+    "entryPoint": "./src/index.ts"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^8.17.10",
+    "@remotion/cli": "^4.0.290",
+    "@remotion/three": "^4.0.290",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.290",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/three": "^0.170.0",
+    "typescript": "^5.4.5"
+  }
+}
