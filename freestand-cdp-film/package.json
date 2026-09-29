@@ -1,0 +1,28 @@
+{
+  "name": "freestand-cdp-film",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Freestand Studio product film: a stop-motion, keynote-style walkthrough of the FS_CDP demo",
+  "scripts": {
+    "start": "remotion studio",
+    "render": "remotion render FreestandFilm out/freestand-studio.mp4 --codec=h264 --crf=16 --pixel-format=yuv420p --audio-bitrate=256k",
+    "render:fast": "bash scripts/render-fast.sh",
+    "audio": "python3 scripts/make_audio.py",
+    "textures": "python3 scripts/make_textures.py",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.529",
+    "@remotion/fonts": "4.0.529",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "@fontsource-variable/inter": "^5.2.5",
+    "@fontsource/caveat": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.2.5",
+    "@types/react": "18.3.1",
+    "typescript": "5.4.5"
+  }
+}
