@@ -16,3 +16,14 @@ Storyboard (30fps): 0–3.5s aerial of India Gate in smog · 3.5–8.3s street-l
 8.3–10s tablet descends · 10s burst clears the sky · 10.5–13.3s shield + brand line · 13.3–18s pack shot + CTA.
 
 Pack art is a placeholder — swap in the real Celine / RV Life Sciences packshot and logo before release.
+
+## v2 — `CelineShort` (20s, 1080×1920, 2D motion design)
+
+Fast-cut motion-graphics version: AQI hook → school/child messages → rapid-fire symptoms →
+"Wait." + pixel mascot + typed prompt → status card → sticker-board build around the pack →
+sunrise silhouette payoff → click-to-claim free sample CTA.
+
+```bash
+node scripts/gen-audio-short.mjs   # score + SFX synced to the beat sheet
+npx remotion render CelineShort out/celine-short.mp4
+```
