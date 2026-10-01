@@ -29,12 +29,8 @@ const DISQ = [
   { img: "d10.jpg", name: "Atif", badge: "Graphic / listing", meta: "A ‘for sale’ graphic, not a real photo", kind: "warn" },
 ];
 
-const TABS = [
-  { t: "Instagram submissions", c: 196 },
-  { t: "No Instagram link", c: 619 },
-  { t: "Disqualified", c: 20 },
-  { t: "Invalid links", c: 70 },
-];
+// Tab counts are deliberately left out: the demo shows indexed figures only.
+const TABS = ["Instagram submissions", "No Instagram link", "Disqualified", "Invalid links"];
 
 const Badge: React.FC<{ kind: "ok" | "bad" | "warn" | "mut"; children: React.ReactNode }> = ({ kind, children }) => {
   const m = {
@@ -183,7 +179,7 @@ const DashShell: React.FC<{ tab: number; children: React.ReactNode; chips: React
     <div style={{ display: "flex", gap: 2, padding: "4px 24px 0", borderBottom: "1px solid #e5e7eb", flex: "none" }}>
       {TABS.map((t, i) => (
         <div
-          key={t.t}
+          key={t}
           style={{
             display: "flex",
             alignItems: "center",
@@ -195,8 +191,7 @@ const DashShell: React.FC<{ tab: number; children: React.ReactNode; chips: React
             borderBottom: `2px solid ${i === tab ? PURPLE : "transparent"}`,
           }}
         >
-          {t.t}
-          <span style={{ fontSize: 12, padding: "1px 8px", borderRadius: 999, background: i === tab ? "#edf1f8" : "#f3f4f6" }}>{t.c}</span>
+          {t}
         </div>
       ))}
     </div>
@@ -283,9 +278,9 @@ export const DashboardQualified: React.FC = () => {
               lead="Shared an Instagram link. AI checked the post matches their chat photo and shows a cat."
               chips={
                 <>
-                  <Chip on>All · 196</Chip>
-                  <Chip>Has cat · 181</Chip>
-                  <Chip>Does not have cat · 15</Chip>
+                  <Chip on>All</Chip>
+                  <Chip>Has cat</Chip>
+                  <Chip>Does not have cat</Chip>
                 </>
               }
             >
@@ -319,10 +314,11 @@ export const DASH_B = 300;
 
 const Funnel: React.FC<{ at: number }> = ({ at }) => {
   const rows = [
-    { k: "Cat parents engaged", v: 5866, w: 1, note: "" },
-    { k: "Submitted UGC", v: 865, w: 865 / 5866, note: "14.7%" },
-    { k: "Verified by UGC AI", v: 865, w: 865 / 5866, note: "100%" },
-    { k: "Posted on Instagram", v: 196, w: 196 / 5866, note: "" },
+    // Indexed: cat parents engaged = 100 (no absolute counts shown).
+    { k: "Cat parents engaged", v: 100, note: "" },
+    { k: "Submitted UGC", v: 14.7, note: "" },
+    { k: "Verified by UGC AI", v: 14.7, note: "100% of UGC" },
+    { k: "Posted on Instagram", v: 3.3, note: "" },
   ];
   return (
     <div>
@@ -333,12 +329,12 @@ const Funnel: React.FC<{ at: number }> = ({ at }) => {
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 19, marginBottom: 6 }}>
               <span style={{ color: C.mut }}>{r.k}</span>
               <span style={{ fontWeight: 700 }}>
-                <CountUp to={r.v} delay={at + i * 10} dur={24} />
+                <CountUp to={r.v} delay={at + i * 10} dur={24} decimals={r.v === 100 ? 0 : 1} />
                 {r.note && <span style={{ color: C.purple, marginLeft: 8, fontWeight: 600 }}>{r.note}</span>}
               </span>
             </div>
             <div style={{ height: 10, borderRadius: 5, background: "rgba(255,255,255,0.08)" }}>
-              <div style={{ width: `${r.w * p * 100}%`, height: "100%", borderRadius: 5, background: "linear-gradient(90deg,#a874f6,#e46fae)" }} />
+              <div style={{ width: `${r.v * p}%`, height: "100%", borderRadius: 5, background: "linear-gradient(90deg,#a874f6,#e46fae)" }} />
             </div>
           </div>
         );
@@ -379,7 +375,7 @@ export const DashboardRejected: React.FC = () => {
             lead="Not a real cat photo — stock images, graphics, AI fakes or no cat at all."
             chips={
               <>
-                <Chip on>All · 20</Chip>
+                <Chip on>All</Chip>
                 <Chip>Stock image</Chip>
                 <Chip>Graphic</Chip>
                 <Chip>AI / fake</Chip>
@@ -408,6 +404,7 @@ export const DashboardRejected: React.FC = () => {
           <div style={{ fontSize: 18, color: C.mut, fontWeight: 600, marginBottom: 18 }}>
             <span style={{ color: C.purple }}>✦</span> Campaign summary · #MyFussyCatAd
           </div>
+          <div style={{ fontSize: 15, color: C.dim, marginTop: -10, marginBottom: 16 }}>Indexed · cat parents engaged = 100</div>
           <Funnel at={132} />
         </div>
         <div style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${C.cardLine}`, borderRadius: 20, padding: "20px 28px", marginTop: 16 }}>
@@ -415,10 +412,10 @@ export const DashboardRejected: React.FC = () => {
             <span style={{ color: C.purple }}>✦</span> One-click next actions
           </div>
           {[
-            ["🔔", "Remind 619 to post on Instagram"],
-            ["🔗", "Ask 70 for a valid post link"],
-            ["↩︎", "Ask 20 to re-upload a real cat"],
-            ["✓", "Approve 196 matched posts"],
+            ["🔔", "Remind those who haven’t posted yet"],
+            ["🔗", "Ask for a valid post link"],
+            ["↩︎", "Ask for a re-upload with a real cat"],
+            ["✓", "Approve every matched post"],
           ].map(([i, t], k) => (
             <Appear key={t} delay={180 + k * 8} y={8}>
               <div style={{ display: "flex", gap: 12, fontSize: 20, padding: "6px 0" }}>

@@ -19,7 +19,7 @@ v2 got two pieces of feedback: it never showed how people find the offer, and it
 | 9 | Same engine, any brand | Bebeautiful, Vaseline and F&B examples |
 | 10 | End card | "Target. Invite. Verify. Reward." |
 
-Campaign numbers (5,866 engaged · 865 UGC · 196 IG posts · 619 no link · 70 invalid links · 20 disqualified) come from the case study and the brand dashboard. On the dashboard, participant names are cut to a first name and handles are masked. The CDP filters, the web flow screens and the `@ananya.and.ginger` / Meera personas are illustrative.
+Campaign figures are **indexed** (cat parents engaged = 100 → 14.7 submitted UGC → 3.3 posted on Instagram) or shown as ratios. No absolute participant counts appear anywhere, including the dashboard tabs. On the dashboard, participant names are cut to a first name and handles are masked. The CDP filters, the web flow screens and the `@ananya.and.ginger` / Meera personas are illustrative.
 
 ## Render
 

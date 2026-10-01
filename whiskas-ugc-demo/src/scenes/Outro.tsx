@@ -9,10 +9,10 @@ export const RESULTS = 180;
 export const Results: React.FC = () => {
   const f = useCurrentFrame();
   const stats = [
-    { big: "1 in 7", sm: "cat parents engaged created a UGC", src: "865 of 5,866" },
-    { big: "10 in 10", sm: "entries verified by UGC AI — zero manual review", src: "all 865" },
-    { big: "1 in 10", sm: "bad entries caught automatically", src: "90 stock, no-cat or bad links" },
-    { big: "~1 in 4", sm: "creators also posted publicly on Instagram", src: "196 public posts" },
+    { big: "1 in 7", sm: "cat parents engaged created a UGC", src: "14.7 per 100 engaged" },
+    { big: "10 in 10", sm: "entries verified by UGC AI — zero manual review", src: "100% of submissions" },
+    { big: "1 in 10", sm: "bad entries caught automatically", src: "stock photos, no cat, bad links" },
+    { big: "~1 in 4", sm: "creators also posted publicly on Instagram", src: "~23% of submissions" },
   ];
   return (
     <Scene dur={RESULTS}>
