@@ -1,8 +1,7 @@
 import React from "react";
+import { loadFont as loadLocalFont } from "@remotion/fonts";
 import {
   AbsoluteFill,
-  continueRender,
-  delayRender,
   Easing,
   Img,
   interpolate,
@@ -13,22 +12,12 @@ import {
 } from "remotion";
 // Inter (variable, latin) is bundled in public/fonts so renders work offline.
 export const fontFamily = "Inter, sans-serif";
-if (typeof document !== "undefined") {
-  const handle = delayRender("Loading Inter");
-  const face = new FontFace("Inter", `url(${staticFile("fonts/Inter-latin.woff2")}) format("woff2")`, {
-    weight: "400 800",
-  });
-  face
-    .load()
-    .then((f) => {
-      (document.fonts as unknown as Set<FontFace>).add(f);
-      continueRender(handle);
-    })
-    .catch((err) => {
-      console.error(err);
-      continueRender(handle);
-    });
-}
+loadLocalFont({
+  family: "Inter",
+  url: staticFile("fonts/Inter-latin.woff2"),
+  weight: "400 800",
+  format: "woff2",
+}).catch((err) => console.error("Inter failed to load", err));
 
 export const C = {
   bg: "#07060a",
