@@ -62,7 +62,7 @@ const Frame: React.FC<{ src: string; label: string; ig?: boolean }> = ({ src, la
   </div>
 );
 
-const QualCard: React.FC<{ q: (typeof QUAL)[number]; at: number; highlight?: number }> = ({ q, at, highlight = 0 }) => {
+const QualCard: React.FC<{ q: (typeof QUAL)[number]; at: number; highlight?: number; dim?: number }> = ({ q, at, highlight = 0, dim = 0 }) => {
   const p = useProgress(at, 14);
   return (
     <div
@@ -72,7 +72,7 @@ const QualCard: React.FC<{ q: (typeof QUAL)[number]; at: number; highlight?: num
         boxShadow: highlight > 0 ? `0 0 0 ${4 * highlight}px rgba(124,58,237,0.25), 0 20px 50px rgba(0,0,0,${0.25 * highlight})` : "none",
         borderRadius: 14,
         padding: 13,
-        opacity: p,
+        opacity: p * (1 - 0.75 * dim),
         transform: `translateY(${(1 - p) * 18}px)`,
         display: "flex",
         flexDirection: "column",
@@ -276,7 +276,7 @@ export const DashboardQualified: React.FC = () => {
       </div>
       <div style={{ position: "absolute", left: 150, right: 150, top: 220, bottom: 110, overflow: "hidden", borderRadius: 18 }}>
         <Appear delay={8} y={40} style={{ width: "100%", height: "100%" }}>
-          <div style={{ width: "100%", height: "100%", transform: `scale(${s})`, transformOrigin: "16% 60%" }}>
+          <div style={{ width: "100%", height: "100%", transform: `scale(${s})`, transformOrigin: "0% 45%" }}>
             <DashShell
               tab={0}
               heading="Instagram submissions"
@@ -291,23 +291,23 @@ export const DashboardQualified: React.FC = () => {
             >
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14 }}>
                 {QUAL.slice(0, 10).map((q, i) => (
-                  <QualCard key={q.id} q={q} at={18 + i * 5} highlight={i === 0 ? zoom : 0} />
+                  <QualCard key={q.id} q={q} at={18 + i * 5} highlight={i === 0 ? zoom : 0} dim={i === 0 ? 0 : zoom} />
                 ))}
               </div>
             </DashShell>
           </div>
         </Appear>
       </div>
-      <Callout at={180} x={830} y={360}>
+      <Callout at={180} x={700} y={330}>
         <span style={{ color: C.ok }}>●</span> Chat upload ↔ Instagram post · <b>100% match</b>
       </Callout>
-      <Callout at={194} x={830} y={436}>
+      <Callout at={194} x={700} y={410}>
         <span style={{ color: C.ok }}>●</span> Cat detected in <b>both</b>
       </Callout>
-      <Callout at={208} x={830} y={512}>
+      <Callout at={208} x={700} y={490}>
         <span style={{ color: C.ok }}>●</span> Handle, likes & caption captured
       </Callout>
-      <Callout at={222} x={830} y={588}>
+      <Callout at={222} x={700} y={570}>
         <span style={{ color: C.ok }}>●</span> Verdict + next action, ready to approve
       </Callout>
     </Scene>

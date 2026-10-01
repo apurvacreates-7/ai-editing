@@ -1,6 +1,6 @@
 # FreeStand × Whiskas — UGC AI demo (v3)
 
-Remotion source for the Whiskas `#MyFussyCatAd` UGC AI demo video (1920×1080, 30 fps).
+Remotion source for the Whiskas `#MyFussyCatAd` UGC AI demo video (1920×1080, 30 fps, ~94 s).
 
 ## What changed from v2
 
